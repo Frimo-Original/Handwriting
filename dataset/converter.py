@@ -56,6 +56,7 @@ def merge_npz(npz_files, out_npz):
 
 
 def main():
+    (DATASET_DIR / "npzs").mkdir(parents=True, exist_ok=True)
     npz_files = []
     json_files = sorted(
         (DATASET_DIR / "jsons").glob("trajectory_*.json"),

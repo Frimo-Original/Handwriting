@@ -6,12 +6,12 @@ from pathlib import Path
 import numpy as np
 import tqdm
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 import config  # noqa: E402
 
 
-DATASET_DIR = Path(__file__).resolve().parent
+DATASET_DIR = ROOT / "dataset"
 
 
 def convert(json_path, txt_path, out_npz):
@@ -56,6 +56,7 @@ def merge_npz(npz_files, out_npz):
 
 
 def main():
+    (DATASET_DIR / "npzs").mkdir(parents=True, exist_ok=True)
     npz_files = []
     json_files = sorted(
         (DATASET_DIR / "jsons").glob("trajectory_*.json"),
