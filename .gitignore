@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE/editor
+.idea/
+.vscode/
+
+# Training artifacts
+checkpoints/
+checkpoints_attention/
+*.pth
+*.pt
+*.ckpt
+training.log
+*.log
+
+# Generated dataset artifacts. Keep dataset/jsons and dataset/texts in Git.
+dataset/npzs/
+dataset/all_trajectories.npz
+
+# Generated outputs/previews
+generated_trajectory*.json
+generated_trajectory*.png
+uppercase_*_grid.png
+uppercase_*_zoom.png
+output.txt
+
+# OS files
+.DS_Store
+Thumbs.db
