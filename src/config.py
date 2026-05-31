@@ -35,6 +35,10 @@ kappa_initial_bias = -4.0
 num_workers = 0
 pin_memory = device.type == "cuda"
 cudnn_benchmark = True
+cache_prepared_dataset = True
+compile_model = True
+compile_mode = "default"
+compile_heartbeat_seconds = 15
 save_every = 5
 empty_cache_each_epoch = True
 tqdm_ascii = True

@@ -1,4 +1,7 @@
 import sys
+import threading
+import time
+from contextlib import contextmanager
 
 import torch
 import torch.nn.functional as F
@@ -16,6 +19,36 @@ def use_live_progress():
     if mode == "auto":
         return sys.stderr.isatty()
     return False
+
+
+def progress_log(message):
+    if use_live_progress():
+        tqdm.write(message)
+    else:
+        print(message)
+
+
+@contextmanager
+def heartbeat(message, every_seconds=15, enabled=True):
+    if not enabled or every_seconds <= 0:
+        yield
+        return
+
+    done = threading.Event()
+
+    def worker():
+        start = time.perf_counter()
+        while not done.wait(every_seconds):
+            elapsed = time.perf_counter() - start
+            progress_log(f"{message}; still running after {elapsed / 60:.1f} min")
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        done.set()
+        thread.join(timeout=0.1)
 
 
 def collate_fn(batch):
@@ -65,6 +98,8 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
     total_loss = 0.0
     total_batches = 0
     grad_accum_steps = getattr(config, "grad_accum_steps", 1)
+    compiled_model = getattr(model, "_orig_mod", None) is not None
+    compile_heartbeat_seconds = getattr(config, "compile_heartbeat_seconds", 15)
 
     live_progress = use_live_progress()
     progress = (
@@ -91,7 +126,24 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
         text_lengths = batch["text_lengths"].to(device, non_blocking=config.pin_memory)
         lengths = batch["length"].to(device, non_blocking=config.pin_memory)
 
-        outputs = model(dxy, e_target, text, text_lengths, teacher_forcing_ratio=1.0)
+        first_compiled_batch = compiled_model and batch_idx == 0
+        if first_compiled_batch:
+            progress_log(
+                "torch.compile: first batch starts now. "
+                "PyTorch may spend several minutes compiling before batch progress moves."
+            )
+            if live_progress:
+                progress.set_description(f"Epoch {epoch + 1} compile forward")
+                progress.refresh()
+
+        forward_started = time.perf_counter()
+        with heartbeat(
+            f"torch.compile forward epoch={epoch + 1} batch=1",
+            every_seconds=compile_heartbeat_seconds,
+            enabled=first_compiled_batch,
+        ):
+            outputs = model(dxy, e_target, text, text_lengths, teacher_forcing_ratio=1.0)
+        forward_seconds = time.perf_counter() - forward_started
 
         B, T = dxy.shape[:2]
         mask = torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)
@@ -116,7 +168,19 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
         attention_weight = getattr(config, "attention_loss_weight", 0.0)
         loss_attn = kappa_progress_loss(outputs["kappa"], lengths, text_lengths)
         loss = loss_mdn + loss_e + attention_weight * loss_attn
-        (loss / grad_accum_steps).backward()
+
+        if first_compiled_batch and live_progress:
+            progress.set_description(f"Epoch {epoch + 1} compile backward")
+            progress.refresh()
+
+        backward_started = time.perf_counter()
+        with heartbeat(
+            f"torch.compile backward epoch={epoch + 1} batch=1",
+            every_seconds=compile_heartbeat_seconds,
+            enabled=first_compiled_batch,
+        ):
+            (loss / grad_accum_steps).backward()
+        backward_seconds = time.perf_counter() - backward_started
 
         should_step = (batch_idx + 1) % grad_accum_steps == 0 or batch_idx + 1 == len(dataloader)
         if should_step:
@@ -138,5 +202,13 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
             postfix["gpu"] = f"{torch.cuda.memory_allocated(device) / 1024**3:.2f}GB"
         if live_progress:
             progress.set_postfix(postfix)
+
+        if first_compiled_batch:
+            progress_log(
+                "torch.compile first batch finished: "
+                f"B={B}, T={T}, forward={forward_seconds:.1f}s, backward={backward_seconds:.1f}s"
+            )
+            if live_progress:
+                progress.set_description(f"Epoch {epoch + 1}")
 
     return total_loss / max(total_batches, 1)

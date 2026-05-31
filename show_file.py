@@ -1,11 +1,10 @@
 import json
 import matplotlib.pyplot as plt
 
-# with open('dataset/jsons/trajectory_21.json', 'r') as f:
-#     points = json.load(f)
-
-with open('src/generated_trajectory.json', 'r') as f:
+with open('dataset/jsons/trajectory_351.json', 'r') as f:
     points = json.load(f)
+# with open('src/generated_trajectory.json', 'r') as f:
+#     points = json.load(f)
 
 xs, ys = [], []
 for x, y, state in points:

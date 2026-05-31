@@ -4,12 +4,13 @@ from torch.utils.data import Dataset
 
 
 class HandwritingDataset(Dataset):
-    def __init__(self, npz_path, max_seq_len=12000, normalize=True):
+    def __init__(self, npz_path, max_seq_len=12000, normalize=True, cache_prepared=True):
         data = np.load(npz_path, allow_pickle=True)
         self.points = data["points"]
         self.text_indices = data["text_indices"]
         self.max_seq_len = max_seq_len
         self.normalize = normalize
+        self.cache_prepared = cache_prepared
 
         if self.points.dtype == np.object_:
             self.points = [np.asarray(p, dtype=np.float32) for p in self.points]
@@ -42,10 +43,20 @@ class HandwritingDataset(Dataset):
             self.dxdy_mean = np.zeros((1, 2), dtype=np.float32)
             self.dxdy_std = np.ones((1, 2), dtype=np.float32)
 
+        self.prepared_samples = None
+        if self.cache_prepared:
+            self.prepared_samples = [self._prepare_sample(idx) for idx in range(len(self.points))]
+
     def __len__(self):
         return len(self.points)
 
     def __getitem__(self, idx):
+        if self.prepared_samples is not None:
+            return self.prepared_samples[idx]
+
+        return self._prepare_sample(idx)
+
+    def _prepare_sample(self, idx):
         pts = self.points[idx].copy()
         if pts.ndim != 2 or pts.shape[1] < 3:
             raise ValueError(f"sample {idx} must have shape (T, 3)")

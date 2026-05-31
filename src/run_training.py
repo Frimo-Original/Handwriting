@@ -1,5 +1,6 @@
 import os
 import re
+import time
 from pathlib import Path
 
 import torch
@@ -17,6 +18,12 @@ CHECKPOINT_DIR = config.checkpoints
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 LIVE_PROGRESS = use_live_progress()
 log = tqdm.write if LIVE_PROGRESS else print
+RUN_STARTED_AT = time.perf_counter()
+
+
+def stage(message):
+    elapsed = time.perf_counter() - RUN_STARTED_AT
+    log(f"[startup {elapsed:6.1f}s] {message}")
 
 if config.device.type == "cuda":
     torch.backends.cudnn.benchmark = config.cudnn_benchmark
@@ -27,7 +34,11 @@ else:
     print("Using CPU")
 
 def make_dataloader():
-    dataset = HandwritingDataset(DATA_PATH, max_seq_len=config.max_seq_len)
+    dataset = HandwritingDataset(
+        DATA_PATH,
+        max_seq_len=config.max_seq_len,
+        cache_prepared=getattr(config, "cache_prepared_dataset", True),
+    )
     dataloader = DataLoader(
         dataset,
         batch_size=config.batch_size,
@@ -63,10 +74,33 @@ def checkpoint_config_matches(checkpoint):
     return all(saved.get(key) == value for key, value in expected.items())
 
 
+def maybe_compile_model(model):
+    if not getattr(config, "compile_model", False):
+        return model
+    if not hasattr(torch, "compile"):
+        log("torch.compile is not available in this PyTorch version; using eager model.")
+        return model
+
+    try:
+        compiled = torch.compile(model, mode=getattr(config, "compile_mode", "default"))
+    except Exception as exc:
+        log(f"torch.compile failed during setup; using eager model. Reason: {exc}")
+        return model
+
+    log(f"Using torch.compile mode={getattr(config, 'compile_mode', 'default')}")
+    return compiled
+
+
+def unwrap_compiled_model(model):
+    return getattr(model, "_orig_mod", model)
+
+
+stage("Preparing dataset and DataLoader...")
 dataset, dataloader = make_dataloader()
 dataset_mtime = os.path.getmtime(DATA_PATH)
-log(f"Loaded dataset: {len(dataset)} samples")
+stage(f"Loaded dataset: {len(dataset)} samples")
 
+stage("Creating model...")
 model = HandwritingSynthesis(
     vocab_size=config.vocab_size,
     embed_dim=config.embed_dim,
@@ -76,7 +110,9 @@ model = HandwritingSynthesis(
     n_mixtures=config.n_mixtures,
     kappa_initial_bias=config.kappa_initial_bias,
 ).to(config.device)
+stage("Model created")
 
+stage("Creating optimizer...")
 optimizer = torch.optim.RMSprop(
     model.parameters(),
     lr=config.learning_rate,
@@ -84,6 +120,7 @@ optimizer = torch.optim.RMSprop(
     momentum=0.9,
     eps=1e-4,
 )
+stage("Optimizer created")
 
 start_epoch = 0
 resume_path = config.resume_checkpoint
@@ -92,6 +129,7 @@ if resume_path is None and config.auto_resume:
     resume_path = str(latest_checkpoint) if latest_checkpoint else None
 
 if resume_path:
+    stage(f"Loading checkpoint: {resume_path}")
     checkpoint = torch.load(resume_path, map_location=config.device, weights_only=False)
     if not checkpoint_config_matches(checkpoint):
         log(f"Skip resume: checkpoint config does not match current model: {resume_path}")
@@ -110,7 +148,11 @@ if resume_path:
             match = re.search(r"epoch_(\d+)\.pth$", str(resume_path))
             if match:
                 start_epoch = int(match.group(1))
-        log(f"Resumed from {resume_path}; next epoch: {start_epoch + 1}")
+        stage(f"Resumed from {resume_path}; next epoch: {start_epoch + 1}")
+
+stage("Preparing torch.compile wrapper...")
+model = maybe_compile_model(model)
+stage("Training loop starts")
 
 for epoch in range(start_epoch, config.num_epochs):
     loss = train_one_epoch(model, dataloader, optimizer, config.device, epoch)
@@ -122,7 +164,7 @@ for epoch in range(start_epoch, config.num_epochs):
         torch.save(
             {
                 "epoch": epoch + 1,
-                "model_state_dict": model.state_dict(),
+                "model_state_dict": unwrap_compiled_model(model).state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "dxdy_mean": dataset.dxdy_mean,
                 "dxdy_std": dataset.dxdy_std,

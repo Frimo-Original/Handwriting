@@ -32,6 +32,8 @@ dataset/all_trajectories.npz
 # Generated outputs/previews
 generated_trajectory*.json
 generated_trajectory*.png
+generated_variants/
+generation_eval/
 uppercase_*_grid.png
 uppercase_*_zoom.png
 output.txt
