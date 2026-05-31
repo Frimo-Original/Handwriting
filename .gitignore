@@ -30,10 +30,15 @@ dataset/npzs/
 dataset/all_trajectories.npz
 
 # Generated outputs/previews
+runs/
+candidate_runs/
 generated_trajectory*.json
 generated_trajectory*.png
 generated_variants/
 generation_eval/
+src/generated_trajectory*.json
+src/generated_variants/
+src/generation_eval/
 uppercase_*_grid.png
 uppercase_*_zoom.png
 output.txt

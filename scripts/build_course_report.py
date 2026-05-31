@@ -636,8 +636,8 @@ def build_report():
             ("src/generate.py", "авторегрессионная генерация траекторий"),
             ("src/run_generate.py", "генерация нескольких вариантов одной строки"),
             ("src/compare_epochs_bias.py", "визуальное сравнение эпох и bias"),
-            ("dataset/converter.py", "сборка JSON/TXT в единый NPZ-датасет"),
-            ("label_trajectories.py", "интерфейс разметки и проверки траекторий"),
+            ("dataset/scripts/converter.py", "сборка JSON/TXT в единый NPZ-датасет"),
+            ("dataset/scripts/label_trajectories.py", "интерфейс разметки и проверки траекторий"),
         ],
         widths=[Cm(5), Cm(10)],
     )

@@ -1,0 +1,249 @@
+# -*- coding: utf-8 -*-
+"""One command-line entry point for the handwriting project."""
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+
+
+def run_python(args, env=None):
+    full_env = os.environ.copy()
+    cache_dir = ROOT / "runs" / ".cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    full_env.setdefault("MPLCONFIGDIR", str(cache_dir / "matplotlib"))
+    full_env.setdefault("XDG_CACHE_HOME", str(cache_dir))
+    if env:
+        full_env.update({key: str(value) for key, value in env.items() if value is not None})
+    return subprocess.run([sys.executable, *args], cwd=ROOT, env=full_env, check=True)
+
+
+def latest_checkpoint(checkpoint_dir):
+    paths = []
+    for path in Path(checkpoint_dir).glob("epoch_*.pth"):
+        match = re.fullmatch(r"epoch_(\d+)\.pth", path.name)
+        if match:
+            paths.append((int(match.group(1)), path))
+    return max(paths, key=lambda item: item[0])[1] if paths else None
+
+
+def cmd_status(args):
+    sys.path.insert(0, str(SRC))
+    import config
+
+    data_path = Path(config.data_path)
+    checkpoint_dir = Path(args.checkpoints or config.checkpoints)
+    runs_dir = Path(config.runs_dir)
+    latest = latest_checkpoint(checkpoint_dir)
+    best = checkpoint_dir / "best.pth"
+
+    print("Project:", ROOT)
+    print("Python:", sys.executable)
+    print("Dataset:", data_path, "OK" if data_path.exists() else "missing")
+    print("Checkpoints:", checkpoint_dir, "OK" if checkpoint_dir.exists() else "missing")
+    print("Latest checkpoint:", latest if latest else "missing")
+    print("Best checkpoint:", best if best.exists() else "missing")
+    print("Runs:", runs_dir)
+    print("Target words:", ROOT / "dataset" / "target_texts.txt")
+
+    if data_path.exists():
+        try:
+            import numpy as np
+
+            data = np.load(data_path, allow_pickle=True)
+            points = data["points"]
+            lengths = [len(item) for item in points]
+            print("Samples:", len(lengths), "points:", sum(lengths))
+        except Exception as exc:
+            print("Dataset summary failed:", exc)
+
+
+def cmd_dataset(args):
+    run_python(["dataset/scripts/converter.py"])
+
+
+def cmd_train(args):
+    env = {
+        "CHECKPOINTS": args.checkpoints,
+        "EPOCHS": args.epochs,
+        "MORE_EPOCHS": args.more_epochs,
+        "BATCH_SIZE": args.batch_size,
+        "GRAD_ACCUM_STEPS": args.grad_accum_steps,
+        "LR": args.lr,
+        "NUM_WORKERS": args.num_workers,
+        "SAVE_EVERY": args.save_every,
+        "SAVE_TEMPORARY_EACH_EPOCH": str(args.temporary_checkpoints).lower(),
+        "MAX_SEQ_LEN": args.max_seq_len,
+        "VALIDATION_SPLIT": args.validation_split,
+        "EVAL_EVERY": args.eval_every,
+        "PROGRESS_MODE": args.progress_mode,
+        "AUTO_RESUME": str(args.auto_resume).lower(),
+        "RESUME": args.resume,
+    }
+    if not args.rebuild_dataset:
+        dataset_path = ROOT / "dataset" / "all_trajectories.npz"
+        if not dataset_path.exists():
+            print("Dataset is missing; rebuilding first.")
+            cmd_dataset(args)
+        run_python(["scripts/server_train.py"], env=env)
+    else:
+        cmd_dataset(args)
+        run_python(["scripts/server_train.py"], env=env)
+
+
+def cmd_evaluate(args):
+    command = ["src/evaluate_checkpoint.py", "--checkpoints", args.checkpoints]
+    if args.checkpoint:
+        command.extend(["--checkpoint", args.checkpoint])
+    if args.output:
+        command.extend(["--output", args.output])
+    run_python(command)
+
+
+def cmd_generate(args):
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    safe_text = re.sub(r"[^\wа-яА-ЯёЁ]+", "_", args.text, flags=re.UNICODE).strip("_") or "text"
+    stem = args.name or safe_text.lower()
+    env = {
+        "CHECKPOINTS": args.checkpoints,
+        "TEXT": args.text,
+        "BIAS": args.bias,
+        "MIN_GEN_LEN": args.min_len,
+        "MAX_GEN_LEN": args.max_len,
+        "STOP_STRATEGY": args.stop_strategy,
+        "APPEND_EOS": str(args.append_eos).lower(),
+        "OUTPUT_JSON": output_dir / f"{stem}.json",
+        "OUTPUT_PNG": output_dir / f"{stem}.png",
+        "OUTPUT_META": output_dir / f"{stem}.meta.json",
+    }
+    run_python(["scripts/server_generate.py"], env=env)
+
+
+def cmd_candidates(args):
+    command = [
+        "src/generate_candidates.py",
+        "--checkpoints",
+        args.checkpoints,
+        "--texts",
+        args.texts,
+        "--output-dir",
+        args.output_dir,
+        "--biases",
+        args.biases,
+        "--variants",
+        str(args.variants),
+        "--base-seed",
+        str(args.base_seed),
+        "--stop-strategy",
+        args.stop_strategy,
+    ]
+    if args.checkpoint:
+        command.extend(["--checkpoint", args.checkpoint])
+    if args.append_eos:
+        command.append("--append-eos")
+    run_python(command)
+
+
+def cmd_clean(args):
+    paths = [
+        ROOT / "generated_trajectory.json",
+        ROOT / "generated_trajectory.png",
+        ROOT / "generated_trajectory.meta.json",
+        ROOT / "src" / "generated_trajectory.json",
+        ROOT / "src" / "generated_variants",
+        ROOT / "src" / "generation_eval",
+        ROOT / "candidate_runs",
+    ]
+    if args.include_runs:
+        paths.append(ROOT / "runs")
+
+    for path in paths:
+        if not path.exists():
+            continue
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+        print("Removed:", path.relative_to(ROOT))
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(description="Handwriting synthesis project helper.")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--checkpoints", default="checkpoints_attention")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    status = subparsers.add_parser("status", parents=[common], help="Show project, dataset and checkpoint status.")
+    status.set_defaults(func=cmd_status)
+
+    dataset = subparsers.add_parser("dataset", help="Rebuild dataset/all_trajectories.npz.")
+    dataset.set_defaults(func=cmd_dataset)
+
+    train = subparsers.add_parser("train", parents=[common], help="Continue model training.")
+    train.add_argument("--epochs", default="")
+    train.add_argument("--more-epochs", default="20")
+    train.add_argument("--batch-size", default="")
+    train.add_argument("--grad-accum-steps", default="")
+    train.add_argument("--lr", default="")
+    train.add_argument("--num-workers", default="0")
+    train.add_argument("--save-every", default="")
+    train.add_argument("--temporary-checkpoints", action=argparse.BooleanOptionalAction, default=True)
+    train.add_argument("--max-seq-len", default="")
+    train.add_argument("--validation-split", default="")
+    train.add_argument("--eval-every", default="")
+    train.add_argument("--progress-mode", default="live")
+    train.add_argument("--resume", default="")
+    train.add_argument("--auto-resume", action=argparse.BooleanOptionalAction, default=True)
+    train.add_argument("--rebuild-dataset", action="store_true")
+    train.set_defaults(func=cmd_train)
+
+    evaluate = subparsers.add_parser("evaluate", parents=[common], help="Evaluate a checkpoint on validation split.")
+    evaluate.add_argument("--checkpoint", default="")
+    evaluate.add_argument("--output", default="")
+    evaluate.set_defaults(func=cmd_evaluate)
+
+    generate = subparsers.add_parser("generate", parents=[common], help="Generate one handwriting sample.")
+    generate.add_argument("--text", required=True)
+    generate.add_argument("--bias", default="1.25")
+    generate.add_argument("--min-len", default="200")
+    generate.add_argument("--max-len", default="3000")
+    generate.add_argument("--output-dir", default="runs/single")
+    generate.add_argument("--name", default="")
+    generate.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="max")
+    generate.add_argument("--append-eos", action="store_true")
+    generate.set_defaults(func=cmd_generate)
+
+    candidates = subparsers.add_parser("candidates", parents=[common], help="Generate and rank many candidates.")
+    candidates.add_argument("--texts", default="dataset/target_texts.txt")
+    candidates.add_argument("--checkpoint", default="")
+    candidates.add_argument("--output-dir", default="runs/candidates/latest")
+    candidates.add_argument("--biases", default="0.75,1.0,1.25,1.5,1.75")
+    candidates.add_argument("--variants", type=int, default=8)
+    candidates.add_argument("--base-seed", type=int, default=12345)
+    candidates.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="max")
+    candidates.add_argument("--append-eos", action="store_true")
+    candidates.set_defaults(func=cmd_candidates)
+
+    clean = subparsers.add_parser("clean", help="Remove generated outputs outside source/data.")
+    clean.add_argument("--include-runs", action="store_true")
+    clean.set_defaults(func=cmd_clean)
+
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

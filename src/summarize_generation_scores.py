@@ -3,15 +3,17 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 
+import config
 
-EVAL_DIR = None  # Example: Path("generation_eval/20260517_203000")
+
+EVAL_DIR = None  # Example: Path("runs/generation_eval/20260517_203000")
 
 
 def latest_eval_dir():
-    root = Path("generation_eval")
+    root = Path(config.runs_dir) / "generation_eval"
     candidates = [path for path in root.glob("*") if path.is_dir()]
     if not candidates:
-        raise FileNotFoundError("No generation_eval/* folders found")
+        raise FileNotFoundError(f"No evaluation folders found in {root}")
     return max(candidates, key=lambda path: path.stat().st_mtime)
 
 

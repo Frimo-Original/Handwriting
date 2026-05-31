@@ -29,6 +29,15 @@ MIN_GEN_LEN ?= 200
 MAX_GEN_LEN ?= 3000
 OUTPUT_JSON ?= generated_trajectory.json
 OUTPUT_PNG ?= generated_trajectory.png
+OUTPUT_META ?= generated_trajectory.meta.json
+STOP_STRATEGY ?= max
+APPEND_EOS ?= false
+TARGET_TEXTS ?=
+CANDIDATE_DIR ?= candidate_runs/latest
+CANDIDATE_BIASES ?=
+CANDIDATE_VARIANTS ?=
+VALIDATION_SPLIT ?=
+EVAL_EVERY ?=
 
 ifneq ($(strip $(CUDA_VISIBLE_DEVICES)),)
 CUDA_PREFIX := CUDA_VISIBLE_DEVICES=$(CUDA_VISIBLE_DEVICES)
@@ -36,7 +45,7 @@ else
 CUDA_PREFIX :=
 endif
 
-.PHONY: help venv check dataset train train-log latest generate clean-npzs
+.PHONY: help venv check dataset train train-log latest generate evaluate candidates clean-npzs
 
 help:
 > @printf '%s\n' \
@@ -48,6 +57,8 @@ help:
 >   '  make train-log                    Continue training and append output to LOG' \
 >   '  make latest                       Print latest checkpoint path' \
 >   '  make generate TEXT="..."          Generate JSON/PNG from latest checkpoint' \
+>   '  make evaluate                     Evaluate latest/best checkpoint on validation split' \
+>   '  make candidates TARGET_TEXTS="..." Generate/rank many candidates for target words' \
 >   '' \
 >   'Useful variables:' \
 >   '  MORE_EPOCHS=20                    Train 20 epochs after the latest checkpoint' \
@@ -80,20 +91,25 @@ check: venv
 > "$(PY)" scripts/server_check.py
 
 dataset: venv
-> mkdir -p dataset/npzs
-> "$(PY)" dataset/converter.py
+> "$(PY)" scripts/handwriting.py dataset
 
 latest:
 > if [ -d "$(CHECKPOINTS)" ]; then find "$(CHECKPOINTS)" -maxdepth 1 -name 'epoch_*.pth' | sort -V | tail -n 1; else echo "Missing checkpoint dir: $(CHECKPOINTS)"; fi
 
 train: dataset
-> $(CUDA_PREFIX) CHECKPOINTS="$(CHECKPOINTS)" EPOCHS="$(EPOCHS)" MORE_EPOCHS="$(MORE_EPOCHS)" BATCH_SIZE="$(BATCH_SIZE)" GRAD_ACCUM_STEPS="$(GRAD_ACCUM_STEPS)" LR="$(LR)" NUM_WORKERS="$(NUM_WORKERS)" SAVE_EVERY="$(SAVE_EVERY)" MAX_SEQ_LEN="$(MAX_SEQ_LEN)" PROGRESS_MODE="$(PROGRESS_MODE)" AUTO_RESUME="$(AUTO_RESUME)" RESUME="$(RESUME)" "$(PY)" scripts/server_train.py
+> $(CUDA_PREFIX) "$(PY)" scripts/handwriting.py train --checkpoints "$(CHECKPOINTS)" --epochs "$(EPOCHS)" --more-epochs "$(MORE_EPOCHS)" --batch-size "$(BATCH_SIZE)" --grad-accum-steps "$(GRAD_ACCUM_STEPS)" --lr "$(LR)" --num-workers "$(NUM_WORKERS)" --save-every "$(SAVE_EVERY)" --max-seq-len "$(MAX_SEQ_LEN)" --validation-split "$(VALIDATION_SPLIT)" --eval-every "$(EVAL_EVERY)" --progress-mode "$(PROGRESS_MODE)" $(if $(filter false,$(AUTO_RESUME)),--no-auto-resume,) --resume "$(RESUME)"
 
 train-log:
 > $(MAKE) train 2>&1 | tee -a "$(LOG)"
 
 generate: venv
-> $(CUDA_PREFIX) CHECKPOINTS="$(CHECKPOINTS)" TEXT="$(TEXT)" BIAS="$(BIAS)" MIN_GEN_LEN="$(MIN_GEN_LEN)" MAX_GEN_LEN="$(MAX_GEN_LEN)" OUTPUT_JSON="$(OUTPUT_JSON)" OUTPUT_PNG="$(OUTPUT_PNG)" "$(PY)" scripts/server_generate.py
+> $(CUDA_PREFIX) "$(PY)" scripts/handwriting.py generate --checkpoints "$(CHECKPOINTS)" --text "$(TEXT)" --bias "$(BIAS)" --min-len "$(MIN_GEN_LEN)" --max-len "$(MAX_GEN_LEN)" --stop-strategy "$(STOP_STRATEGY)" --output-dir "$$(dirname "$(OUTPUT_JSON)")"
+
+evaluate: venv
+> $(CUDA_PREFIX) "$(PY)" scripts/handwriting.py evaluate --checkpoints "$(CHECKPOINTS)"
+
+candidates: venv
+> $(CUDA_PREFIX) "$(PY)" scripts/handwriting.py candidates --checkpoints "$(CHECKPOINTS)" --texts "$(TARGET_TEXTS)" --output-dir "$(CANDIDATE_DIR)" $(if $(strip $(CANDIDATE_BIASES)),--biases "$(CANDIDATE_BIASES)",) $(if $(strip $(CANDIDATE_VARIANTS)),--variants "$(CANDIDATE_VARIANTS)",)
 
 clean-npzs:
 > rm -f dataset/npzs/*.npz dataset/all_trajectories.npz

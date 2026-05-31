@@ -39,7 +39,7 @@ MAX_GEN_LEN = 5000
 MIN_GEN_LEN = 1
 
 RUN_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
-OUTPUT_DIR = Path("generation_eval") / RUN_NAME
+OUTPUT_DIR = Path(config.runs_dir) / "generation_eval" / RUN_NAME
 SHOW_PLOTS = True
 SAVE_JSON = True
 SAVE_HTML = True

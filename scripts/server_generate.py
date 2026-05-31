@@ -53,8 +53,11 @@ def main():
     bias = float(os.environ.get("BIAS", "1.0"))
     min_len = int(os.environ.get("MIN_GEN_LEN", "200"))
     max_len = int(os.environ.get("MAX_GEN_LEN", "3000"))
+    stop_strategy = os.environ.get("STOP_STRATEGY", "max")
+    append_eos = os.environ.get("APPEND_EOS", "").strip().lower() in {"1", "true", "yes", "y", "on"}
     output_json = os.environ.get("OUTPUT_JSON", "generated_trajectory.json")
     output_png = os.environ.get("OUTPUT_PNG", "generated_trajectory.png")
+    output_meta = os.environ.get("OUTPUT_META", "generated_trajectory.meta.json")
 
     checkpoint_path = latest_checkpoint(config.checkpoints)
     print("Checkpoint:", checkpoint_path)
@@ -75,7 +78,7 @@ def main():
     dxdy_mean = np.asarray(checkpoint.get("dxdy_mean", [[0.0, 0.0]]), dtype=np.float32)
     dxdy_std = np.asarray(checkpoint.get("dxdy_std", [[1.0, 1.0]]), dtype=np.float32)
 
-    trajectory = generate(
+    trajectory, diagnostics = generate(
         model,
         text,
         config.char_to_idx,
@@ -85,13 +88,20 @@ def main():
         dxdy_mean=dxdy_mean,
         dxdy_std=dxdy_std,
         min_len=min_len,
+        append_eos=append_eos,
+        eos_char=config.eos_char,
+        stop_strategy=stop_strategy,
+        return_diagnostics=True,
     )
 
     with open(output_json, "w", encoding="utf-8") as f:
         json.dump(trajectory, f, indent=2, ensure_ascii=False)
+    with open(output_meta, "w", encoding="utf-8") as f:
+        json.dump(diagnostics, f, indent=2, ensure_ascii=False)
 
     save_preview(trajectory, output_png, f'Generated: "{text}"')
     print(f"Saved {len(trajectory)} points to {output_json}")
+    print(f"Saved diagnostics to {output_meta}")
     print(f"Saved preview to {output_png}")
 
 

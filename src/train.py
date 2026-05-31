@@ -91,6 +91,63 @@ def kappa_progress_loss(kappa, lengths, text_lengths):
     return F.smooth_l1_loss(pred[mask], target[mask])
 
 
+def batch_losses(model, batch, device):
+    dxy = batch["dxy"].to(device, non_blocking=config.pin_memory)
+    e_target = batch["e"].to(device, non_blocking=config.pin_memory)
+    text = batch["text"].to(device, non_blocking=config.pin_memory)
+    text_lengths = batch["text_lengths"].to(device, non_blocking=config.pin_memory)
+    lengths = batch["length"].to(device, non_blocking=config.pin_memory)
+
+    outputs = model(dxy, e_target, text, text_lengths, teacher_forcing_ratio=1.0)
+
+    B, T = dxy.shape[:2]
+    mask = torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)
+    flat_mask = mask.reshape(-1)
+
+    loss_mdn = mdn_loss(
+        outputs["pi"].reshape(B * T, -1)[flat_mask],
+        outputs["mu"].reshape(B * T, outputs["mu"].shape[2], 2)[flat_mask],
+        outputs["sigma"].reshape(B * T, outputs["sigma"].shape[2], 2)[flat_mask],
+        outputs["rho"].reshape(B * T, -1)[flat_mask],
+        dxy.reshape(B * T, 2)[flat_mask],
+        reduction="mean",
+    )
+    e_logits = outputs["e_logit"].reshape(B * T, 1)[flat_mask]
+    e_targets = e_target.reshape(B * T, 1)[flat_mask]
+    loss_e = F.binary_cross_entropy_with_logits(
+        e_logits,
+        e_targets,
+        pos_weight=pen_up_pos_weight(e_targets),
+    )
+
+    loss_attn = kappa_progress_loss(outputs["kappa"], lengths, text_lengths)
+    attention_weight = getattr(config, "attention_loss_weight", 0.0)
+    loss = loss_mdn + loss_e + attention_weight * loss_attn
+    return {
+        "loss": loss,
+        "mdn": loss_mdn.detach(),
+        "pen": loss_e.detach(),
+        "attn": loss_attn.detach(),
+    }
+
+
+@torch.no_grad()
+def evaluate(model, dataloader, device):
+    model.eval()
+    totals = {"loss": 0.0, "mdn": 0.0, "pen": 0.0, "attn": 0.0}
+    batches = 0
+
+    for batch in dataloader:
+        losses = batch_losses(model, batch, device)
+        for key in totals:
+            value = losses[key]
+            totals[key] += float(value.item() if torch.is_tensor(value) else value)
+        batches += 1
+
+    denom = max(batches, 1)
+    return {key: value / denom for key, value in totals.items()}
+
+
 def train_one_epoch(model, dataloader, optimizer, device, epoch):
     model.train()
     optimizer.zero_grad(set_to_none=True)
@@ -120,12 +177,6 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
     )
 
     for batch_idx, batch in enumerate(progress):
-        dxy = batch["dxy"].to(device, non_blocking=config.pin_memory)
-        e_target = batch["e"].to(device, non_blocking=config.pin_memory)
-        text = batch["text"].to(device, non_blocking=config.pin_memory)
-        text_lengths = batch["text_lengths"].to(device, non_blocking=config.pin_memory)
-        lengths = batch["length"].to(device, non_blocking=config.pin_memory)
-
         first_compiled_batch = compiled_model and batch_idx == 0
         if first_compiled_batch:
             progress_log(
@@ -142,32 +193,12 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
             every_seconds=compile_heartbeat_seconds,
             enabled=first_compiled_batch,
         ):
-            outputs = model(dxy, e_target, text, text_lengths, teacher_forcing_ratio=1.0)
+            losses = batch_losses(model, batch, device)
         forward_seconds = time.perf_counter() - forward_started
-
-        B, T = dxy.shape[:2]
-        mask = torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)
-        flat_mask = mask.reshape(-1)
-
-        loss_mdn = mdn_loss(
-            outputs["pi"].reshape(B * T, -1)[flat_mask],
-            outputs["mu"].reshape(B * T, outputs["mu"].shape[2], 2)[flat_mask],
-            outputs["sigma"].reshape(B * T, outputs["sigma"].shape[2], 2)[flat_mask],
-            outputs["rho"].reshape(B * T, -1)[flat_mask],
-            dxy.reshape(B * T, 2)[flat_mask],
-            reduction="mean",
-        )
-        e_logits = outputs["e_logit"].reshape(B * T, 1)[flat_mask]
-        e_targets = e_target.reshape(B * T, 1)[flat_mask]
-        loss_e = F.binary_cross_entropy_with_logits(
-            e_logits,
-            e_targets,
-            pos_weight=pen_up_pos_weight(e_targets),
-        )
-
-        attention_weight = getattr(config, "attention_loss_weight", 0.0)
-        loss_attn = kappa_progress_loss(outputs["kappa"], lengths, text_lengths)
-        loss = loss_mdn + loss_e + attention_weight * loss_attn
+        loss = losses["loss"]
+        loss_mdn = losses["mdn"]
+        loss_e = losses["pen"]
+        loss_attn = losses["attn"]
 
         if first_compiled_batch and live_progress:
             progress.set_description(f"Epoch {epoch + 1} compile backward")
@@ -204,6 +235,7 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
             progress.set_postfix(postfix)
 
         if first_compiled_batch:
+            B, T = batch["dxy"].shape[:2]
             progress_log(
                 "torch.compile first batch finished: "
                 f"B={B}, T={T}, forward={forward_seconds:.1f}s, backward={backward_seconds:.1f}s"

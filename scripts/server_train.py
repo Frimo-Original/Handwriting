@@ -38,7 +38,13 @@ def main():
     config.learning_rate = env("LR", float, config.learning_rate)
     config.num_workers = env("NUM_WORKERS", int, config.num_workers)
     config.save_every = env("SAVE_EVERY", int, config.save_every)
+    config.save_temporary_each_epoch = env_bool(
+        "SAVE_TEMPORARY_EACH_EPOCH",
+        getattr(config, "save_temporary_each_epoch", True),
+    )
     config.max_seq_len = env("MAX_SEQ_LEN", int, config.max_seq_len)
+    config.validation_split = env("VALIDATION_SPLIT", float, config.validation_split)
+    config.eval_every = env("EVAL_EVERY", int, config.eval_every)
     config.progress_mode = env("PROGRESS_MODE", str, config.progress_mode)
     config.auto_resume = env_bool("AUTO_RESUME", config.auto_resume)
     config.pin_memory = config.device.type == "cuda"
@@ -63,7 +69,11 @@ def main():
     print("  grad_accum_steps:", config.grad_accum_steps)
     print("  effective_batch:", config.batch_size * config.grad_accum_steps)
     print("  learning_rate:", config.learning_rate)
+    print("  validation_split:", config.validation_split)
+    print("  eval_every:", config.eval_every)
     print("  num_workers:", config.num_workers)
+    print("  save_every:", config.save_every)
+    print("  save_temporary_each_epoch:", config.save_temporary_each_epoch)
     print("  auto_resume:", config.auto_resume)
     print("  resume_checkpoint:", config.resume_checkpoint)
 
