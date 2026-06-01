@@ -189,6 +189,19 @@ def is_permanent_epoch(epoch):
     return epoch % save_every == 0 or epoch == config.num_epochs
 
 
+def apply_more_epochs(start_epoch):
+    more_epochs = getattr(config, "more_epochs", None)
+    if more_epochs in (None, False, "", 0):
+        return
+
+    more_epochs = int(more_epochs)
+    if more_epochs <= 0:
+        return
+
+    config.num_epochs = start_epoch + more_epochs
+    stage(f"Configured to train {more_epochs} more epochs; final epoch: {config.num_epochs}")
+
+
 def maybe_delete_temporary_checkpoint(path):
     if not path:
         return
@@ -265,6 +278,8 @@ if resume_path:
             if match:
                 start_epoch = int(match.group(1))
         stage(f"Resumed from {resume_path}; next epoch: {start_epoch + 1}")
+
+apply_more_epochs(start_epoch)
 
 stage("Preparing torch.compile wrapper...")
 model = maybe_compile_model(model)

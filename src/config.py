@@ -2,77 +2,144 @@ from pathlib import Path
 
 import torch
 
-# Data
+
+# -----------------------------------------------------------------------------
+# Пути проекта
+# -----------------------------------------------------------------------------
+# Все пути строятся относительно корня проекта. Поэтому скрипты можно запускать
+# из корневой папки без ручной передачи абсолютных путей.
+project_root = Path(__file__).resolve().parents[1]
+data_path = str(project_root / "dataset" / "all_trajectories.npz")
+checkpoints = str(project_root / "checkpoints_attention")
+runs_dir = str(project_root / "runs")
+
+
+# -----------------------------------------------------------------------------
+# Алфавит текста
+# -----------------------------------------------------------------------------
+# Модель умеет писать только символы из CHAR_SET.
+# Символ "\n" также используется как маркер конца последовательности.
 CHAR_SET = "\n\" абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ.,!?-;:()1234567890"
 char_to_idx = {ch: i for i, ch in enumerate(CHAR_SET)}
 idx_to_char = {i: ch for ch, i in char_to_idx.items()}
 vocab_size = len(CHAR_SET)
 eos_char = "\n"
 
-# Model. These values follow the handwriting synthesis setup from Graves.
+
+# -----------------------------------------------------------------------------
+# Архитектура модели
+# -----------------------------------------------------------------------------
+# Модель в стиле Graves:
+# - рекуррентная часть предсказывает движение пера;
+# - attention window отслеживает позицию в целевом тексте;
+# - MDN-голова предсказывает смесь распределений для следующего движения пера.
 embed_dim = vocab_size
 lstm_size = 400
 num_lstm_layers = 3
-n_mixtures = 20
-K = 10
+n_mixtures = 20  # Количество Gaussian mixtures для траектории пера.
+K = 10  # Количество attention mixtures по символам входного текста.
+kappa_initial_bias = -4.0  # Замедляет старт attention, полезно для коротких слов.
 
+
+# -----------------------------------------------------------------------------
+# Датасет и валидация
+# -----------------------------------------------------------------------------
+# max_seq_len сильно влияет на скорость: чем меньше значение, тем быстрее эпоха,
+# но тем выше риск обрезать длинные рукописные примеры.
 max_seq_len = 3000
 validation_split = 0.12
 validation_seed = 20260531
 
-# Device
+
+# -----------------------------------------------------------------------------
+# Устройство
+# -----------------------------------------------------------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Training
-batch_size = 2
-grad_accum_steps = 2
-learning_rate = 0.0001
+
+# -----------------------------------------------------------------------------
+# Расписание обучения
+# -----------------------------------------------------------------------------
+# Эти значения соответствуют текущему быстрому профилю для GTX 1660:
+# python scripts/handwriting.py train --more-epochs 10 --batch-size 24
+# --grad-accum-steps 1 --lr 0.00003 --max-seq-len 3000 --bucket-by-length
+# --eval-every 5
+batch_size = 24
+grad_accum_steps = 1
+learning_rate = 0.00003
+
+# num_epochs используется только если more_epochs = None. При прямом запуске
+# python src/run_training.py обучение обычно продолжается на more_epochs эпох
+# от последнего найденного чекпоинта.
 num_epochs = 500
+more_epochs = 10
+
 grad_clip = 10.0
-bucket_by_length = True
-bucket_size_multiplier = 50
 attention_loss_weight = 0.01
 pen_up_pos_weight = "auto"
 max_pen_up_pos_weight = 100.0
-kappa_initial_bias = -4.0
 
-# GTX 1660 friendly defaults: stable fp32 training, small batches, CUDA input pinning.
+
+# -----------------------------------------------------------------------------
+# Батчинг и загрузка данных
+# -----------------------------------------------------------------------------
+# bucket_by_length группирует примеры похожей длины. Это уменьшает padding и,
+# по профайлеру, дает самый заметный прирост скорости на CUDA.
+bucket_by_length = True
+bucket_size_multiplier = 50
+
 num_workers = 0
 pin_memory = device.type == "cuda"
-cudnn_benchmark = True
 cache_prepared_dataset = True
+reload_dataset_each_epoch = True
+
+
+# -----------------------------------------------------------------------------
+# Чекпоинты и продолжение обучения
+# -----------------------------------------------------------------------------
+# save_temporary_each_epoch сохраняет последнюю непостоянную эпоху.
+# Каждая save_every эпоха остается постоянным чекпоинтом.
+auto_resume = True
+resume_checkpoint = None
+save_every = 5
+save_temporary_each_epoch = True
+save_best = True
+best_metric = "val_loss"
+eval_every = 5
+
+
+# -----------------------------------------------------------------------------
+# Производительность и вывод прогресса
+# -----------------------------------------------------------------------------
+cudnn_benchmark = True
 compile_model = False
 compile_mode = "default"
 compile_heartbeat_seconds = 15
-save_every = 5
-save_temporary_each_epoch = True
 empty_cache_each_epoch = True
+
 tqdm_ascii = True
-progress_mode = "live"  # "live" redraws one tqdm line for the current epoch; use "compact" for one line per epoch.
+progress_mode = "live"  # "compact" печатает одну строку на эпоху.
 progress_mininterval = 1.0
 progress_ncols = 120
-reload_dataset_each_epoch = True
-auto_resume = True
-resume_checkpoint = None
-eval_every = 1
-save_best = True
-best_metric = "val_loss"
 
-# Paths
-project_root = Path(__file__).resolve().parents[1]
-data_path = str(project_root / "dataset" / "all_trajectories.npz")
-checkpoints = str(project_root / "checkpoints_attention")
-runs_dir = str(project_root / "runs")
 
-# Target-word workflow. Put the few words that must be written reliably here
-# or override with TARGET_TEXTS="слово,мама" in scripts that support it.
+# -----------------------------------------------------------------------------
+# Целевые слова
+# -----------------------------------------------------------------------------
+# Главная цель проекта - надежно генерировать несколько коротких слов.
+# Скрипты с поддержкой TARGET_TEXTS могут переопределять этот список из env.
 target_texts = [
     "слово",
     "мама",
     "рама",
 ]
 
-# Generation defaults for high-legibility candidate search.
+
+# -----------------------------------------------------------------------------
+# Генерация кандидатов
+# -----------------------------------------------------------------------------
+# Candidate search генерирует несколько вариантов с разными sampling bias,
+# чтобы потом выбрать самые читаемые результаты.
 generation_bias = 1.25
 candidate_biases = [0.75, 1.0, 1.25, 1.5, 1.75]
 candidate_variants_per_bias = 8

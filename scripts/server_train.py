@@ -66,6 +66,7 @@ def main():
         config.num_epochs = int(final_epoch)
     if more_epochs:
         config.num_epochs = latest_epoch_in(checkpoint_dir) + int(more_epochs)
+    config.more_epochs = None
 
     print("Training config:")
     print("  device:", config.device)
