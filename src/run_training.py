@@ -118,6 +118,8 @@ def checkpoint_config_matches(checkpoint):
     expected = {
         "vocab_size": config.vocab_size,
         "embed_dim": config.embed_dim,
+        "vocab_tokens": getattr(config, "VOCAB_TOKENS", list(config.CHAR_SET)),
+        "eos_token": getattr(config, "eos_token", None),
         "lstm_size": config.lstm_size,
         "K": config.K,
         "n_mixtures": config.n_mixtures,
@@ -161,6 +163,8 @@ def checkpoint_payload(epoch, model, optimizer, dataset, metrics, best_val_loss,
         "config": {
             "vocab_size": config.vocab_size,
             "embed_dim": config.embed_dim,
+            "vocab_tokens": getattr(config, "VOCAB_TOKENS", list(config.CHAR_SET)),
+            "eos_token": getattr(config, "eos_token", None),
             "lstm_size": config.lstm_size,
             "K": config.K,
             "n_mixtures": config.n_mixtures,

@@ -10,20 +10,57 @@ import torch
 # из корневой папки без ручной передачи абсолютных путей.
 project_root = Path(__file__).resolve().parents[1]
 data_path = str(project_root / "dataset" / "all_trajectories.npz")
-checkpoints = str(project_root / "checkpoints_attention")
+checkpoints = str(project_root / "checkpoints_attention_eos")
 runs_dir = str(project_root / "runs")
 
 
 # -----------------------------------------------------------------------------
 # Алфавит текста
 # -----------------------------------------------------------------------------
-# Модель умеет писать только символы из CHAR_SET.
-# Символ "\n" также используется как маркер конца последовательности.
+# Модель умеет писать только символы из CHAR_SET. Конец фрагмента - отдельный
+# токен EOS_TOKEN, чтобы "\n" оставался обычным переносом строки.
 CHAR_SET = "\n\" абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ.,!?-;:()1234567890"
-char_to_idx = {ch: i for i, ch in enumerate(CHAR_SET)}
-idx_to_char = {i: ch for ch, i in char_to_idx.items()}
-vocab_size = len(CHAR_SET)
-eos_char = "\n"
+EOS_TOKEN = "<EOS>"
+VOCAB_TOKENS = list(CHAR_SET) + [EOS_TOKEN]
+char_to_idx = {token: i for i, token in enumerate(VOCAB_TOKENS)}
+idx_to_char = {i: token for token, i in char_to_idx.items()}
+vocab_size = len(VOCAB_TOKENS)
+eos_token = EOS_TOKEN
+eos_char = EOS_TOKEN  # Совместимое имя для старого кода генерации.
+append_eos_to_dataset = True
+append_eos_to_generation = True
+strip_final_newline_before_eos = True
+
+
+def normalize_training_text(text):
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    if strip_final_newline_before_eos and text.endswith("\n"):
+        text = text[:-1]
+    return text
+
+
+def tokenize_text(text, append_eos=False, normalize=False):
+    if normalize:
+        text = normalize_training_text(text)
+    tokens = list(text)
+    if append_eos:
+        tokens.append(EOS_TOKEN)
+    return tokens
+
+
+def encode_text(text, append_eos=False, normalize=False, unknown_token=" "):
+    fallback = char_to_idx[unknown_token]
+    return [char_to_idx.get(token, fallback) for token in tokenize_text(text, append_eos, normalize)]
+
+
+def decode_tokens(indices, skip_eos=False):
+    tokens = []
+    for idx in indices:
+        token = idx_to_char[int(idx)]
+        if skip_eos and token == EOS_TOKEN:
+            continue
+        tokens.append(token)
+    return "".join(tokens)
 
 
 # -----------------------------------------------------------------------------

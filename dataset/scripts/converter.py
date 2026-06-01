@@ -15,7 +15,7 @@ def convert(json_path, txt_path, out_npz):
     with open(json_path, "r", encoding="utf-8") as f:
         trajectory = json.load(f)
     with open(txt_path, "r", encoding="utf-8") as f:
-        text = f.read().replace("\r\n", "\n").replace("\r", "\n")
+        text = f.read()
 
     pts = np.asarray(trajectory, dtype=np.float32)
     if pts.ndim != 2 or pts.shape[1] < 3:
@@ -24,7 +24,11 @@ def convert(json_path, txt_path, out_npz):
     pts[-1, 2] = 1.0
 
     text_indices = np.asarray(
-        [config.char_to_idx.get(ch, config.char_to_idx[" "]) for ch in text],
+        config.encode_text(
+            text,
+            append_eos=getattr(config, "append_eos_to_dataset", True),
+            normalize=True,
+        ),
         dtype=np.int64,
     )
     np.savez_compressed(out_npz, points=pts, text_indices=text_indices)

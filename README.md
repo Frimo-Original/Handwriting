@@ -30,7 +30,8 @@ dataset/jsons/           Исходные траектории: trajectory_<id>.
 dataset/texts/           Подписи к этим траекториям: trajectory_<id>.txt
 dataset/all_trajectories.npz
                          Собранный датасет для обучения
-checkpoints_attention/   Сохраненные веса модели
+checkpoints_attention_eos/
+                         Сохраненные веса модели с отдельным <EOS>-токеном
 runs/                    Результаты генерации, оценки и отбора кандидатов
 ```
 
@@ -42,6 +43,8 @@ dataset/texts/trajectory_120.txt
 ```
 
 JSON хранит движения пера, TXT хранит текст, который написан этой траекторией.
+Перенос строки `\n` считается обычным символом текста, а конец обучающего
+фрагмента при сборке датасета добавляется отдельным токеном `<EOS>`.
 Подробный формат датасета и скрипты разметки описаны в
 `dataset/README.md`.
 
@@ -138,7 +141,7 @@ dataset/all_trajectories.npz
 улучшается, сохраняется:
 
 ```text
-checkpoints_attention/best.pth
+checkpoints_attention_eos/best.pth
 ```
 
 Обычные постоянные чекпойнты сохраняются каждые `save_every` эпох. При этом
@@ -233,6 +236,9 @@ book.pdf                 Основная статья, на которой ос
 
 # Пересобрать датасет
 .venv/bin/python scripts/handwriting.py dataset
+
+# Проверить покрытие символов, EOS и длины примеров
+.venv/bin/python scripts/handwriting.py audit-dataset
 
 # Обучать до конкретной эпохи
 .venv/bin/python scripts/handwriting.py train --epochs 450

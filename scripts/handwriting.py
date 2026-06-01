@@ -69,6 +69,25 @@ def cmd_dataset(args):
     run_python(["dataset/scripts/converter.py"])
 
 
+def cmd_audit_dataset(args):
+    command = [
+        "dataset/scripts/audit_dataset.py",
+        "--dataset",
+        args.dataset,
+        "--json-dir",
+        args.json_dir,
+        "--text-dir",
+        args.text_dir,
+        "--output",
+        args.output,
+        "--low-count",
+        str(args.low_count),
+        "--max-seq-len",
+        str(args.max_seq_len),
+    ]
+    run_python(command)
+
+
 def cmd_train(args):
     env = {
         "CHECKPOINTS": args.checkpoints,
@@ -177,8 +196,7 @@ def cmd_candidates(args):
     ]
     if args.checkpoint:
         command.extend(["--checkpoint", args.checkpoint])
-    if args.append_eos:
-        command.append("--append-eos")
+    command.append("--append-eos" if args.append_eos else "--no-append-eos")
     run_python(command)
 
 
@@ -208,7 +226,7 @@ def cmd_clean(args):
 def build_parser():
     parser = argparse.ArgumentParser(description="Handwriting synthesis project helper.")
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--checkpoints", default="checkpoints_attention")
+    common.add_argument("--checkpoints", default="checkpoints_attention_eos")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     status = subparsers.add_parser("status", parents=[common], help="Show project, dataset and checkpoint status.")
@@ -216,6 +234,15 @@ def build_parser():
 
     dataset = subparsers.add_parser("dataset", help="Rebuild dataset/all_trajectories.npz.")
     dataset.set_defaults(func=cmd_dataset)
+
+    audit = subparsers.add_parser("audit-dataset", help="Audit dataset character coverage and sequence lengths.")
+    audit.add_argument("--dataset", default="dataset/all_trajectories.npz")
+    audit.add_argument("--json-dir", default="dataset/jsons")
+    audit.add_argument("--text-dir", default="dataset/texts")
+    audit.add_argument("--output", default="runs/dataset_audit.md")
+    audit.add_argument("--low-count", type=int, default=10)
+    audit.add_argument("--max-seq-len", type=int, default=3000)
+    audit.set_defaults(func=cmd_audit_dataset)
 
     train = subparsers.add_parser("train", parents=[common], help="Continue model training.")
     train.add_argument("--epochs", default="")
@@ -262,7 +289,7 @@ def build_parser():
     generate.add_argument("--output-dir", default="runs/single")
     generate.add_argument("--name", default="")
     generate.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="max")
-    generate.add_argument("--append-eos", action="store_true")
+    generate.add_argument("--append-eos", action=argparse.BooleanOptionalAction, default=True)
     generate.set_defaults(func=cmd_generate)
 
     candidates = subparsers.add_parser("candidates", parents=[common], help="Generate and rank many candidates.")
@@ -273,7 +300,7 @@ def build_parser():
     candidates.add_argument("--variants", type=int, default=8)
     candidates.add_argument("--base-seed", type=int, default=12345)
     candidates.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="max")
-    candidates.add_argument("--append-eos", action="store_true")
+    candidates.add_argument("--append-eos", action=argparse.BooleanOptionalAction, default=True)
     candidates.set_defaults(func=cmd_candidates)
 
     clean = subparsers.add_parser("clean", help="Remove generated outputs outside source/data.")

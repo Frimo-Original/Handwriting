@@ -17,6 +17,13 @@ from generate import generate  # noqa: E402
 from model import HandwritingSynthesis  # noqa: E402
 
 
+def env_bool(name, current):
+    raw = os.environ.get(name, "").strip().lower()
+    if raw == "":
+        return current
+    return raw in {"1", "true", "yes", "y", "on"}
+
+
 def latest_checkpoint(checkpoint_dir):
     paths = []
     for path in Path(checkpoint_dir).glob("epoch_*.pth"):
@@ -54,7 +61,7 @@ def main():
     min_len = int(os.environ.get("MIN_GEN_LEN", "200"))
     max_len = int(os.environ.get("MAX_GEN_LEN", "3000"))
     stop_strategy = os.environ.get("STOP_STRATEGY", "max")
-    append_eos = os.environ.get("APPEND_EOS", "").strip().lower() in {"1", "true", "yes", "y", "on"}
+    append_eos = env_bool("APPEND_EOS", getattr(config, "append_eos_to_generation", True))
     output_json = os.environ.get("OUTPUT_JSON", "generated_trajectory.json")
     output_png = os.environ.get("OUTPUT_PNG", "generated_trajectory.png")
     output_meta = os.environ.get("OUTPUT_META", "generated_trajectory.meta.json")

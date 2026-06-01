@@ -36,15 +36,25 @@ def generate(
         dxdy_mean=None,
         dxdy_std=None,
         min_len=0,
-        append_eos=False,
-        eos_char="\n",
+        append_eos=None,
+        eos_char=None,
         stop_strategy="max",
         progress=True,
         return_diagnostics=False,
 ):
     model.eval()
-    conditioned_text = text + eos_char if append_eos and eos_char in char_to_idx else text
-    indices = [char_to_idx.get(ch, char_to_idx[" "]) for ch in conditioned_text]
+    if append_eos is None:
+        append_eos = getattr(config, "append_eos_to_generation", False)
+    if eos_char is None:
+        eos_char = getattr(config, "eos_token", "\n")
+
+    normalized_text = text.replace("\r\n", "\n").replace("\r", "\n")
+    tokens = list(normalized_text)
+    if append_eos and eos_char in char_to_idx:
+        tokens.append(eos_char)
+
+    conditioned_text = "".join(tokens)
+    indices = [char_to_idx.get(token, char_to_idx[" "]) for token in tokens]
     text_tensor = torch.tensor([indices], device=device, dtype=torch.long)
     char_emb = model.text_embed(text_tensor)
 

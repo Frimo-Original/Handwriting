@@ -112,7 +112,11 @@ def main():
     parser.add_argument("--biases", default=",".join(str(v) for v in config.candidate_biases))
     parser.add_argument("--variants", type=int, default=config.candidate_variants_per_bias)
     parser.add_argument("--base-seed", type=int, default=config.candidate_base_seed)
-    parser.add_argument("--append-eos", action="store_true")
+    parser.add_argument(
+        "--append-eos",
+        action=argparse.BooleanOptionalAction,
+        default=getattr(config, "append_eos_to_generation", True),
+    )
     parser.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="max")
     args = parser.parse_args()
 
