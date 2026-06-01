@@ -77,6 +77,16 @@ Build Tools с компонентом `Desktop development with C++`.
 перезапустите команду. В `CMakeLists.txt` добавлен compatibility shim для новых
 CUDA/NVTX, где старого target уже нет.
 
+Если executable собрался, но пишет `CUDA was requested, but this LibTorch build
+has no CUDA support`, обновите `CMakeLists.txt` и удалите старый cache:
+
+```powershell
+Remove-Item -Recurse -Force cpp_experiments\build
+```
+
+После этого запустите benchmark снова. CMake теперь явно включает `USE_CUDA`,
+когда найден CUDA Toolkit.
+
 ## Ручной запуск
 
 Подготовить batch:
