@@ -10,6 +10,7 @@ from tqdm import tqdm
 import config
 from dataset import HandwritingDataset
 from model import HandwritingSynthesis
+from sampling import LengthBucketBatchSampler, dataset_lengths
 from train import collate_fn, evaluate, train_one_epoch, use_live_progress
 
 
@@ -49,24 +50,55 @@ def make_dataloader():
     else:
         train_dataset, val_dataset = dataset, None
 
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=config.batch_size,
-        shuffle=True,
-        collate_fn=collate_fn,
-        num_workers=config.num_workers,
-        pin_memory=config.pin_memory,
-    )
-    val_loader = None
-    if val_dataset is not None:
-        val_loader = DataLoader(
-            val_dataset,
+    if getattr(config, "bucket_by_length", True):
+        train_sampler = LengthBucketBatchSampler(
+            dataset_lengths(train_dataset, config.max_seq_len),
             batch_size=config.batch_size,
-            shuffle=False,
+            shuffle=True,
+            bucket_size_multiplier=getattr(config, "bucket_size_multiplier", 50),
+            seed=getattr(config, "validation_seed", 20260531),
+        )
+        train_loader = DataLoader(
+            train_dataset,
+            batch_sampler=train_sampler,
             collate_fn=collate_fn,
             num_workers=config.num_workers,
             pin_memory=config.pin_memory,
         )
+    else:
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=config.batch_size,
+            shuffle=True,
+            collate_fn=collate_fn,
+            num_workers=config.num_workers,
+            pin_memory=config.pin_memory,
+        )
+    val_loader = None
+    if val_dataset is not None:
+        if getattr(config, "bucket_by_length", True):
+            val_sampler = LengthBucketBatchSampler(
+                dataset_lengths(val_dataset, config.max_seq_len),
+                batch_size=config.batch_size,
+                shuffle=False,
+                bucket_size_multiplier=getattr(config, "bucket_size_multiplier", 50),
+            )
+            val_loader = DataLoader(
+                val_dataset,
+                batch_sampler=val_sampler,
+                collate_fn=collate_fn,
+                num_workers=config.num_workers,
+                pin_memory=config.pin_memory,
+            )
+        else:
+            val_loader = DataLoader(
+                val_dataset,
+                batch_size=config.batch_size,
+                shuffle=False,
+                collate_fn=collate_fn,
+                num_workers=config.num_workers,
+                pin_memory=config.pin_memory,
+            )
     return dataset, train_loader, val_loader
 
 

@@ -37,6 +37,12 @@ def main():
     config.grad_accum_steps = env("GRAD_ACCUM_STEPS", int, config.grad_accum_steps)
     config.learning_rate = env("LR", float, config.learning_rate)
     config.num_workers = env("NUM_WORKERS", int, config.num_workers)
+    config.bucket_by_length = env_bool("BUCKET_BY_LENGTH", getattr(config, "bucket_by_length", True))
+    config.bucket_size_multiplier = env(
+        "BUCKET_SIZE_MULTIPLIER",
+        int,
+        getattr(config, "bucket_size_multiplier", 50),
+    )
     config.save_every = env("SAVE_EVERY", int, config.save_every)
     config.save_temporary_each_epoch = env_bool(
         "SAVE_TEMPORARY_EACH_EPOCH",
@@ -72,6 +78,8 @@ def main():
     print("  validation_split:", config.validation_split)
     print("  eval_every:", config.eval_every)
     print("  num_workers:", config.num_workers)
+    print("  bucket_by_length:", config.bucket_by_length)
+    print("  bucket_size_multiplier:", config.bucket_size_multiplier)
     print("  save_every:", config.save_every)
     print("  save_temporary_each_epoch:", config.save_temporary_each_epoch)
     print("  auto_resume:", config.auto_resume)

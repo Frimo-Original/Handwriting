@@ -227,6 +227,10 @@ book.pdf                 Основная статья, на которой ос
 # Найти узкое место обучения на нескольких batch
 .venv/bin/python scripts/handwriting.py profile-train --batches 8 --warmup 1
 
+# Сравнить профиль без группировки и с группировкой batch по длинам
+.venv/bin/python scripts/handwriting.py profile-train --batch-size 12 --no-bucket-by-length
+.venv/bin/python scripts/handwriting.py profile-train --batch-size 12 --bucket-by-length
+
 # Пересобрать датасет
 .venv/bin/python scripts/handwriting.py dataset
 

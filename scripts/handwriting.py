@@ -78,6 +78,8 @@ def cmd_train(args):
         "GRAD_ACCUM_STEPS": args.grad_accum_steps,
         "LR": args.lr,
         "NUM_WORKERS": args.num_workers,
+        "BUCKET_BY_LENGTH": str(args.bucket_by_length).lower(),
+        "BUCKET_SIZE_MULTIPLIER": args.bucket_size_multiplier,
         "SAVE_EVERY": args.save_every,
         "SAVE_TEMPORARY_EACH_EPOCH": str(args.temporary_checkpoints).lower(),
         "MAX_SEQ_LEN": args.max_seq_len,
@@ -123,6 +125,11 @@ def cmd_profile_train(args):
         "--num-workers",
         str(args.num_workers),
     ]
+    if args.bucket_by_length:
+        command.append("--bucket-by-length")
+    else:
+        command.append("--no-bucket-by-length")
+    command.extend(["--bucket-size-multiplier", str(args.bucket_size_multiplier)])
     if args.checkpoint:
         command.extend(["--checkpoint", args.checkpoint])
     if args.no_load_checkpoint:
@@ -217,6 +224,8 @@ def build_parser():
     train.add_argument("--grad-accum-steps", default="")
     train.add_argument("--lr", default="")
     train.add_argument("--num-workers", default="0")
+    train.add_argument("--bucket-by-length", action=argparse.BooleanOptionalAction, default=True)
+    train.add_argument("--bucket-size-multiplier", default="")
     train.add_argument("--save-every", default="")
     train.add_argument("--temporary-checkpoints", action=argparse.BooleanOptionalAction, default=True)
     train.add_argument("--max-seq-len", default="")
@@ -240,6 +249,8 @@ def build_parser():
     profile.add_argument("--batch-size", type=int, default=2)
     profile.add_argument("--max-seq-len", type=int, default=3000)
     profile.add_argument("--num-workers", type=int, default=0)
+    profile.add_argument("--bucket-by-length", action=argparse.BooleanOptionalAction, default=True)
+    profile.add_argument("--bucket-size-multiplier", type=int, default=50)
     profile.add_argument("--no-load-checkpoint", action="store_true")
     profile.set_defaults(func=cmd_profile_train)
 

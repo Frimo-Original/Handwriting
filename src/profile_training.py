@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 import config
 from dataset import HandwritingDataset
 from model import HandwritingSynthesis
+from sampling import LengthBucketBatchSampler, dataset_lengths
 from train import collate_fn, kappa_progress_loss, pen_up_pos_weight
 from utils import mdn_loss
 
@@ -138,12 +139,16 @@ def main():
     parser.add_argument("--batch-size", type=int, default=config.batch_size)
     parser.add_argument("--max-seq-len", type=int, default=config.max_seq_len)
     parser.add_argument("--num-workers", type=int, default=config.num_workers)
+    parser.add_argument("--bucket-by-length", action=argparse.BooleanOptionalAction, default=config.bucket_by_length)
+    parser.add_argument("--bucket-size-multiplier", type=int, default=config.bucket_size_multiplier)
     parser.add_argument("--no-load-checkpoint", action="store_true")
     args = parser.parse_args()
 
     config.batch_size = args.batch_size
     config.max_seq_len = args.max_seq_len
     config.num_workers = args.num_workers
+    config.bucket_by_length = args.bucket_by_length
+    config.bucket_size_multiplier = args.bucket_size_multiplier
     config.pin_memory = config.device.type == "cuda"
 
     if config.device.type == "cuda":
@@ -155,14 +160,30 @@ def main():
         max_seq_len=config.max_seq_len,
         cache_prepared=getattr(config, "cache_prepared_dataset", True),
     )
-    dataloader = DataLoader(
-        dataset,
-        batch_size=config.batch_size,
-        shuffle=True,
-        collate_fn=collate_fn,
-        num_workers=config.num_workers,
-        pin_memory=config.pin_memory,
-    )
+    if config.bucket_by_length:
+        sampler = LengthBucketBatchSampler(
+            dataset_lengths(dataset, config.max_seq_len),
+            batch_size=config.batch_size,
+            shuffle=True,
+            bucket_size_multiplier=config.bucket_size_multiplier,
+            seed=getattr(config, "validation_seed", 20260531),
+        )
+        dataloader = DataLoader(
+            dataset,
+            batch_sampler=sampler,
+            collate_fn=collate_fn,
+            num_workers=config.num_workers,
+            pin_memory=config.pin_memory,
+        )
+    else:
+        dataloader = DataLoader(
+            dataset,
+            batch_size=config.batch_size,
+            shuffle=True,
+            collate_fn=collate_fn,
+            num_workers=config.num_workers,
+            pin_memory=config.pin_memory,
+        )
 
     model = make_model()
     checkpoint_path = Path(args.checkpoint) if args.checkpoint else find_latest_checkpoint(args.checkpoints)
@@ -188,6 +209,8 @@ def main():
     print("batch_size:", config.batch_size)
     print("max_seq_len:", config.max_seq_len)
     print("num_workers:", config.num_workers)
+    print("bucket_by_length:", config.bucket_by_length)
+    print("bucket_size_multiplier:", config.bucket_size_multiplier)
     print("pin_memory:", config.pin_memory)
     print("warmup_batches:", args.warmup)
     print("measured_batches:", args.batches)
