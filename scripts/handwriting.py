@@ -88,6 +88,25 @@ def cmd_audit_dataset(args):
     run_python(command)
 
 
+def cmd_compare_spacing(args):
+    command = [
+        "dataset/scripts/compare_line_spacing.py",
+        "--sample",
+        args.sample,
+        "--json-dir",
+        args.json_dir,
+        "--text-dir",
+        args.text_dir,
+        "--expected-lines",
+        str(args.expected_lines),
+        "--try-mm",
+        args.try_mm,
+    ]
+    if args.meta:
+        command.extend(["--meta", args.meta])
+    run_python(command)
+
+
 def cmd_train(args):
     env = {
         "CHECKPOINTS": args.checkpoints,
@@ -243,6 +262,15 @@ def build_parser():
     audit.add_argument("--low-count", type=int, default=10)
     audit.add_argument("--max-seq-len", type=int, default=3000)
     audit.set_defaults(func=cmd_audit_dataset)
+
+    spacing = subparsers.add_parser("compare-spacing", help="Compare a new multi-line sample with dataset vertical stats.")
+    spacing.add_argument("--sample", required=True)
+    spacing.add_argument("--meta", default="")
+    spacing.add_argument("--json-dir", default="dataset/jsons")
+    spacing.add_argument("--text-dir", default="dataset/texts")
+    spacing.add_argument("--expected-lines", type=int, default=2)
+    spacing.add_argument("--try-mm", default="8,9,10,11,12")
+    spacing.set_defaults(func=cmd_compare_spacing)
 
     train = subparsers.add_parser("train", parents=[common], help="Continue model training.")
     train.add_argument("--epochs", default="")

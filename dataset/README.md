@@ -107,6 +107,20 @@ dataset/scripts/handrwritting.py
 создать соответствующий `dataset/texts/trajectory_<id>.txt` или открыть
 `label_trajectories.py --edit` и подписать новый образец там.
 
+```text
+dataset/scripts/compare_line_spacing.py
+```
+
+Сравнивает вертикальный масштаб нового многострочного образца с текущим
+датасетом. Это полезно при записи на новом устройстве: скрипт показывает
+центры строк, расстояние между ними, высоту букв и варианты `gridStepMm` для
+текущего `ydpi`.
+
+```bash
+.venv/bin/python scripts/handwriting.py compare-spacing \
+  --sample path/to/trajectory_1.json
+```
+
 ## Добавление новых образцов
 
 1. Создать `dataset/jsons/trajectory_<new_id>.json`.
