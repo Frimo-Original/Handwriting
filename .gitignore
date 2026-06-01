@@ -18,7 +18,6 @@ env/
 
 # Training artifacts
 checkpoints/
-checkpoints_attention/
 *.pth
 *.pt
 *.ckpt
@@ -41,6 +40,8 @@ src/generation_eval/
 uppercase_*_grid.png
 uppercase_*_zoom.png
 output.txt
+cpp_experiments/build/
+cpp_experiments/batches/
 
 # OS files
 .DS_Store

@@ -10,7 +10,7 @@ import torch
 # из корневой папки без ручной передачи абсолютных путей.
 project_root = Path(__file__).resolve().parents[1]
 data_path = str(project_root / "dataset" / "all_trajectories.npz")
-checkpoints = str(project_root / "checkpoints_attention_eos_quotes")
+checkpoints = str(project_root / "checkpoints_attention")
 runs_dir = str(project_root / "runs")
 
 
