@@ -107,6 +107,29 @@ def cmd_evaluate(args):
     run_python(command)
 
 
+def cmd_profile_train(args):
+    command = [
+        "src/profile_training.py",
+        "--checkpoints",
+        args.checkpoints,
+        "--batches",
+        str(args.batches),
+        "--warmup",
+        str(args.warmup),
+        "--batch-size",
+        str(args.batch_size),
+        "--max-seq-len",
+        str(args.max_seq_len),
+        "--num-workers",
+        str(args.num_workers),
+    ]
+    if args.checkpoint:
+        command.extend(["--checkpoint", args.checkpoint])
+    if args.no_load_checkpoint:
+        command.append("--no-load-checkpoint")
+    run_python(command)
+
+
 def cmd_generate(args):
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -209,6 +232,16 @@ def build_parser():
     evaluate.add_argument("--checkpoint", default="")
     evaluate.add_argument("--output", default="")
     evaluate.set_defaults(func=cmd_evaluate)
+
+    profile = subparsers.add_parser("profile-train", parents=[common], help="Profile training bottlenecks on a few batches.")
+    profile.add_argument("--checkpoint", default="")
+    profile.add_argument("--batches", type=int, default=8)
+    profile.add_argument("--warmup", type=int, default=1)
+    profile.add_argument("--batch-size", type=int, default=2)
+    profile.add_argument("--max-seq-len", type=int, default=3000)
+    profile.add_argument("--num-workers", type=int, default=0)
+    profile.add_argument("--no-load-checkpoint", action="store_true")
+    profile.set_defaults(func=cmd_profile_train)
 
     generate = subparsers.add_parser("generate", parents=[common], help="Generate one handwriting sample.")
     generate.add_argument("--text", required=True)

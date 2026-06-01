@@ -224,6 +224,9 @@ book.pdf                 Основная статья, на которой ос
 # Состояние проекта
 .venv/bin/python scripts/handwriting.py status
 
+# Найти узкое место обучения на нескольких batch
+.venv/bin/python scripts/handwriting.py profile-train --batches 8 --warmup 1
+
 # Пересобрать датасет
 .venv/bin/python scripts/handwriting.py dataset
 
