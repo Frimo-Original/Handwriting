@@ -5,7 +5,15 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Newer CUDA installations may not provide the legacy nvToolsExt CMake target
+# that PyTorch's Caffe2 config still references on Windows.
+find_package(CUDAToolkit QUIET)
+if(CUDAToolkit_FOUND AND NOT TARGET CUDA::nvToolsExt)
+  add_library(CUDA::nvToolsExt INTERFACE IMPORTED)
+endif()
+
 find_package(Torch REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 add_executable(bench_train_step bench_train_step.cpp)
 target_link_libraries(bench_train_step "${TORCH_LIBRARIES}")

@@ -2,6 +2,7 @@
 import argparse
 import os
 import platform
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +21,48 @@ import config  # noqa: E402
 def run(command, cwd=ROOT):
     print("+", " ".join(str(part) for part in command))
     subprocess.run([str(part) for part in command], cwd=cwd, check=True)
+
+
+def python_package_cmake():
+    try:
+        import cmake  # noqa: WPS433
+    except ImportError:
+        return None
+
+    cmake_bin_dir = Path(getattr(cmake, "CMAKE_BIN_DIR", ""))
+    exe_name = "cmake.exe" if platform.system() == "Windows" else "cmake"
+    candidate = cmake_bin_dir / exe_name
+    return candidate if candidate.exists() else None
+
+
+def find_cmake(explicit=""):
+    candidates = []
+    if explicit:
+        candidates.append(Path(explicit))
+
+    env_cmake = os.environ.get("CMAKE_EXE", "").strip()
+    if env_cmake:
+        candidates.append(Path(env_cmake))
+
+    path_cmake = shutil.which("cmake")
+    if path_cmake:
+        candidates.append(Path(path_cmake))
+
+    package_cmake = python_package_cmake()
+    if package_cmake:
+        candidates.append(package_cmake)
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    install_hint = (
+        "CMake executable was not found. Install it into the active venv with:\n"
+        "  python -m pip install cmake\n"
+        "or install CMake/Visual Studio Build Tools and add cmake.exe to PATH.\n"
+        "You can also pass --cmake C:\\\\path\\\\to\\\\cmake.exe or set CMAKE_EXE."
+    )
+    raise FileNotFoundError(install_hint)
 
 
 def executable_path(build_dir):
@@ -50,6 +93,7 @@ def parse_args():
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu")
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--iters", type=int, default=5)
+    parser.add_argument("--cmake", default="", help="Path to cmake executable. Defaults to PATH or Python cmake package.")
     parser.add_argument("--skip-prepare", action="store_true")
     parser.add_argument("--skip-build", action="store_true")
     return parser.parse_args()
@@ -77,8 +121,9 @@ def main():
         )
 
     if not args.skip_build:
+        cmake_exe = find_cmake(args.cmake)
         configure = [
-            "cmake",
+            cmake_exe,
             "-S",
             CPP_DIR,
             "-B",
@@ -88,7 +133,7 @@ def main():
         if platform.system() != "Windows":
             configure.append("-DCMAKE_BUILD_TYPE=Release")
         run(configure)
-        run(["cmake", "--build", build_dir, "--config", "Release", "--parallel", str(os.cpu_count() or 2)])
+        run([cmake_exe, "--build", build_dir, "--config", "Release", "--parallel", str(os.cpu_count() or 2)])
 
     exe = executable_path(build_dir)
     run(

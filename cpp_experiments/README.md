@@ -35,7 +35,7 @@ train-step текущей Graves-style модели из Python в C++/LibTorch,
 На PC с CUDA:
 
 ```bash
-.venv/bin/python cpp_experiments/run_benchmark.py \
+python cpp_experiments/run_benchmark.py \
   --device cuda \
   --batch-size 24 \
   --batch-mode median \
@@ -48,6 +48,34 @@ train-step текущей Graves-style модели из Python в C++/LibTorch,
 1. Готовит `cpp_experiments/batches/batch.bin` из текущего датасета.
 2. Собирает C++ benchmark через CMake и LibTorch из установленного PyTorch.
 3. Запускает `bench_train_step`.
+
+## Windows
+
+Если запуск падает с `FileNotFoundError: cmake`, CMake не найден в `PATH`.
+Самый простой вариант:
+
+```powershell
+python -m pip install cmake
+```
+
+После этого повторить команду benchmark. Также можно передать путь явно:
+
+```powershell
+python cpp_experiments/run_benchmark.py `
+  --device cuda `
+  --batch-size 24 `
+  --batch-mode median `
+  --warmup 1 `
+  --iters 8 `
+  --cmake "C:\Program Files\CMake\bin\cmake.exe"
+```
+
+Для сборки C++ на Windows также нужен MSVC compiler, обычно из Visual Studio
+Build Tools с компонентом `Desktop development with C++`.
+
+Если CMake падает на `CUDA::nvToolsExt`, обновите файлы эксперимента и
+перезапустите команду. В `CMakeLists.txt` добавлен compatibility shim для новых
+CUDA/NVTX, где старого target уже нет.
 
 ## Ручной запуск
 
