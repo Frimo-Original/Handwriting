@@ -226,7 +226,7 @@ def cmd_clean(args):
 def build_parser():
     parser = argparse.ArgumentParser(description="Handwriting synthesis project helper.")
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--checkpoints", default="checkpoints_attention_eos")
+    common.add_argument("--checkpoints", default="checkpoints_attention_eos_quotes")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     status = subparsers.add_parser("status", parents=[common], help="Show project, dataset and checkpoint status.")

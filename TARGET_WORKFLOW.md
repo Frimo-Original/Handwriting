@@ -27,7 +27,7 @@ dataset/target_texts.txt
 При улучшении `val_loss` сохраняется:
 
 ```text
-checkpoints_attention_eos/best.pth
+checkpoints_attention_eos_quotes/best.pth
 ```
 
 Проверить текущий чекпойнт:

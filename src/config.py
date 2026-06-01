@@ -10,16 +10,19 @@ import torch
 # из корневой папки без ручной передачи абсолютных путей.
 project_root = Path(__file__).resolve().parents[1]
 data_path = str(project_root / "dataset" / "all_trajectories.npz")
-checkpoints = str(project_root / "checkpoints_attention_eos")
+checkpoints = str(project_root / "checkpoints_attention_eos_quotes")
 runs_dir = str(project_root / "runs")
 
 
 # -----------------------------------------------------------------------------
 # Алфавит текста
 # -----------------------------------------------------------------------------
-# Модель умеет писать только символы из CHAR_SET. Конец фрагмента - отдельный
-# токен EOS_TOKEN, чтобы "\n" оставался обычным переносом строки.
-CHAR_SET = "\n\" абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ.,!?-;:()1234567890"
+# Модель умеет писать только символы из CHAR_SET. Для кавычек используем "„" как
+# нижнюю открывающую и "“" как верхнюю. Старые прямые кавычки нормализуются в
+# "“", чтобы в алфавите не было двух разных верхних кавычек.
+# Конец фрагмента - отдельный токен EOS_TOKEN, чтобы "\n" оставался обычным
+# переносом строки.
+CHAR_SET = "\n„“ абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ.,!?-;:()1234567890"
 EOS_TOKEN = "<EOS>"
 VOCAB_TOKENS = list(CHAR_SET) + [EOS_TOKEN]
 char_to_idx = {token: i for i, token in enumerate(VOCAB_TOKENS)}
@@ -30,27 +33,60 @@ eos_char = EOS_TOKEN  # Совместимое имя для старого ко
 append_eos_to_dataset = True
 append_eos_to_generation = True
 strip_final_newline_before_eos = True
+# Пока в датасете нет реальных примеров "„", автоматическую парную замену
+# прямых кавычек на "„...“" лучше держать выключенной. Старые прямые кавычки
+# при этом всё равно заменяются на "“".
+normalize_generation_quotes = False
+
+
+def normalize_upper_quotes(text):
+    return text.replace('"', "“")
 
 
 def normalize_training_text(text):
     text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = normalize_upper_quotes(text)
     if strip_final_newline_before_eos and text.endswith("\n"):
         text = text[:-1]
     return text
 
 
-def tokenize_text(text, append_eos=False, normalize=False):
+def normalize_russian_quotes(text):
+    result = []
+    is_opening = True
+    for ch in text:
+        if ch == '"':
+            result.append("„" if is_opening else "“")
+            is_opening = not is_opening
+        else:
+            result.append(ch)
+    return "".join(result)
+
+
+def normalize_generation_text(text):
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    if normalize_generation_quotes:
+        return normalize_russian_quotes(text)
+    return normalize_upper_quotes(text)
+
+
+def tokenize_text(text, append_eos=False, normalize=False, normalize_quotes=False):
     if normalize:
         text = normalize_training_text(text)
+    if normalize_quotes:
+        text = normalize_russian_quotes(text)
     tokens = list(text)
     if append_eos:
         tokens.append(EOS_TOKEN)
     return tokens
 
 
-def encode_text(text, append_eos=False, normalize=False, unknown_token=" "):
+def encode_text(text, append_eos=False, normalize=False, normalize_quotes=False, unknown_token=" "):
     fallback = char_to_idx[unknown_token]
-    return [char_to_idx.get(token, fallback) for token in tokenize_text(text, append_eos, normalize)]
+    return [
+        char_to_idx.get(token, fallback)
+        for token in tokenize_text(text, append_eos, normalize, normalize_quotes)
+    ]
 
 
 def decode_tokens(indices, skip_eos=False):

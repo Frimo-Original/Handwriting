@@ -48,7 +48,7 @@ def generate(
     if eos_char is None:
         eos_char = getattr(config, "eos_token", "\n")
 
-    normalized_text = text.replace("\r\n", "\n").replace("\r", "\n")
+    normalized_text = config.normalize_generation_text(text)
     tokens = list(normalized_text)
     if append_eos and eos_char in char_to_idx:
         tokens.append(eos_char)

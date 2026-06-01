@@ -16,7 +16,7 @@ sys.path.insert(0, str(SRC_DIR))
 import config  # noqa: E402
 
 
-PUNCTUATION = set("\".,!?-;:()")
+PUNCTUATION = set("„“.,!?-;:()")
 
 
 def trajectory_id(path):
