@@ -145,7 +145,7 @@ learning_rate = 0.00003
 # python src/run_training.py обучение обычно продолжается на more_epochs эпох
 # от последнего найденного чекпоинта.
 num_epochs = 500
-more_epochs = 10
+more_epochs = None
 
 grad_clip = 10.0
 attention_loss_weight = 0.01
