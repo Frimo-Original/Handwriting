@@ -30,18 +30,19 @@ def find_checkpoint(checkpoint_dir, checkpoint):
     if checkpoint:
         return Path(checkpoint).expanduser().resolve()
 
-    best = Path(checkpoint_dir) / "best.pth"
-    if best.exists():
-        return best
-
     paths = []
     for path in Path(checkpoint_dir).glob("epoch_*.pth"):
         match = re.fullmatch(r"epoch_(\d+)\.pth", path.name)
         if match:
             paths.append((int(match.group(1)), path))
-    if not paths:
-        raise FileNotFoundError(f"No best.pth or epoch_*.pth found in {checkpoint_dir}")
-    return max(paths, key=lambda item: item[0])[1]
+    if paths:
+        return max(paths, key=lambda item: item[0])[1]
+
+    best = Path(checkpoint_dir) / "best.pth"
+    if best.exists():
+        return best
+
+    raise FileNotFoundError(f"No epoch_*.pth or best.pth found in {checkpoint_dir}")
 
 
 def safe_name(text, max_len=48):
@@ -106,7 +107,7 @@ def make_model():
 def main():
     parser = argparse.ArgumentParser(description="Generate and rank handwriting candidates for target words.")
     parser.add_argument("--texts", default="", help="Comma-separated texts or path to one text per line.")
-    parser.add_argument("--checkpoint", default="", help="Checkpoint path. Defaults to best.pth or latest epoch.")
+    parser.add_argument("--checkpoint", default="", help="Checkpoint path. Defaults to latest epoch_*.pth.")
     parser.add_argument("--checkpoints", default=config.checkpoints)
     parser.add_argument("--output-dir", default=config.candidate_output_dir)
     parser.add_argument("--biases", default=",".join(str(v) for v in config.candidate_biases))
