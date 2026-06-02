@@ -214,9 +214,10 @@ target_texts = [
 # Candidate search генерирует несколько вариантов с разными sampling bias,
 # чтобы потом выбрать самые читаемые результаты.
 generation_bias = 1.25
-candidate_biases = [0.75, 1.0, 1.25, 1.5, 1.75]
+candidate_biases = [0.5, 0.75, 1.0, 1.25, 1.5]
 candidate_variants_per_bias = 8
 candidate_base_seed = 12345
 candidate_max_len_per_char = 350
-candidate_min_len_per_char = 25
+candidate_min_len_per_char = 45
+candidate_stop_strategy = "mean"
 candidate_output_dir = str(project_root / "runs" / "candidates" / "latest")

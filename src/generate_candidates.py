@@ -80,11 +80,12 @@ def candidate_score(text, diagnostics, min_len, max_len):
     width = max(diagnostics["bbox_width"], 1e-6)
     height = max(diagnostics["bbox_height"], 1e-6)
     aspect = width / height
+    attention_progress = diagnostics.get("attention_progress", diagnostics.get("kappa_last_mean", 0.0))
 
     score = 100.0
     score -= min(abs(points - (min_len + max_len) / 2.0) / max(max_len, 1) * 25.0, 25.0)
     score -= 35.0 if not diagnostics["finished"] else 0.0
-    score -= min(abs(diagnostics["kappa_last_max"] - diagnostics["kappa_target"]) * 8.0, 35.0)
+    score -= min(abs(attention_progress - diagnostics["kappa_target"]) * 8.0, 35.0)
     score -= min(max(0.0, 1.2 - aspect) * 12.0, 15.0)
     score -= min(max(0.0, aspect - max(3.0, len(text) * 1.4)) * 2.0, 15.0)
     score -= min(max(0, diagnostics["pen_ups"] - max(2, len(text) + 2)) * 2.0, 15.0)
@@ -113,12 +114,18 @@ def main():
     parser.add_argument("--biases", default=",".join(str(v) for v in config.candidate_biases))
     parser.add_argument("--variants", type=int, default=config.candidate_variants_per_bias)
     parser.add_argument("--base-seed", type=int, default=config.candidate_base_seed)
+    parser.add_argument("--min-len-per-char", type=int, default=config.candidate_min_len_per_char)
+    parser.add_argument("--max-len-per-char", type=int, default=config.candidate_max_len_per_char)
     parser.add_argument(
         "--append-eos",
         action=argparse.BooleanOptionalAction,
         default=getattr(config, "append_eos_to_generation", True),
     )
-    parser.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="max")
+    parser.add_argument(
+        "--stop-strategy",
+        choices=["max", "mean", "min"],
+        default=getattr(config, "candidate_stop_strategy", "mean"),
+    )
     args = parser.parse_args()
 
     texts = parse_texts(args.texts)
@@ -143,8 +150,8 @@ def main():
     for text_idx, text in enumerate(texts):
         text_dir = output_dir / f"{text_idx + 1:02d}_{safe_name(text)}"
         text_dir.mkdir(parents=True, exist_ok=True)
-        min_len = max(1, len(text) * int(config.candidate_min_len_per_char))
-        max_len = max(min_len + 1, len(text) * int(config.candidate_max_len_per_char))
+        min_len = max(1, len(text) * args.min_len_per_char)
+        max_len = max(min_len + 1, len(text) * args.max_len_per_char)
 
         for bias_idx, bias in enumerate(biases):
             for variant in range(args.variants):
@@ -188,7 +195,9 @@ def main():
                     "points": diagnostics["points"],
                     "pen_ups": diagnostics["pen_ups"],
                     "finished": diagnostics["finished"],
+                    "attention_progress": diagnostics["attention_progress"],
                     "kappa_last_max": diagnostics["kappa_last_max"],
+                    "kappa_last_mean": diagnostics["kappa_last_mean"],
                     "kappa_target": diagnostics["kappa_target"],
                     "json_path": str(json_path),
                     "png_path": str(png_path),

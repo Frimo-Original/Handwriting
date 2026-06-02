@@ -210,6 +210,10 @@ def cmd_candidates(args):
         str(args.variants),
         "--base-seed",
         str(args.base_seed),
+        "--min-len-per-char",
+        str(args.min_len_per_char),
+        "--max-len-per-char",
+        str(args.max_len_per_char),
         "--stop-strategy",
         args.stop_strategy,
     ]
@@ -316,7 +320,7 @@ def build_parser():
     generate.add_argument("--max-len", default="3000")
     generate.add_argument("--output-dir", default="runs/single")
     generate.add_argument("--name", default="")
-    generate.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="max")
+    generate.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="mean")
     generate.add_argument("--append-eos", action=argparse.BooleanOptionalAction, default=True)
     generate.set_defaults(func=cmd_generate)
 
@@ -327,7 +331,9 @@ def build_parser():
     candidates.add_argument("--biases", default="0.75,1.0,1.25,1.5,1.75")
     candidates.add_argument("--variants", type=int, default=8)
     candidates.add_argument("--base-seed", type=int, default=12345)
-    candidates.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="max")
+    candidates.add_argument("--min-len-per-char", type=int, default=45)
+    candidates.add_argument("--max-len-per-char", type=int, default=350)
+    candidates.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="mean")
     candidates.add_argument("--append-eos", action=argparse.BooleanOptionalAction, default=True)
     candidates.set_defaults(func=cmd_candidates)
 

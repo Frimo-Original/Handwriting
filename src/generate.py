@@ -74,6 +74,7 @@ def generate(
     kappa_history = []
     e_prob_history = []
     selected_pi_history = []
+    final_progress_value = 0.0
     x_abs, y_abs = 0.0, 0.0
 
     iterator = tqdm(range(max_len), desc="Generating", disable=not progress)
@@ -134,6 +135,7 @@ def generate(
             progress_value = kappa.min().item()
         else:
             progress_value = kappa.max().item()
+        final_progress_value = float(progress_value)
 
         if step + 1 >= min_len and progress_value > len(indices) - 0.5:
             break
@@ -161,7 +163,9 @@ def generate(
         "kappa_last_mean": float(np.mean(last_kappa)) if last_kappa else 0.0,
         "kappa_last_max": float(np.max(last_kappa)) if last_kappa else 0.0,
         "kappa_target": len(indices),
-        "finished": bool(last_kappa and max(last_kappa) > len(indices) - 0.5),
+        "attention_stop_strategy": stop_strategy,
+        "attention_progress": final_progress_value,
+        "finished": bool(last_kappa and final_progress_value > len(indices) - 0.5),
         "mean_pen_up_probability": float(np.mean(e_prob_history)) if e_prob_history else 0.0,
         "mean_max_pi": float(np.mean(selected_pi_history)) if selected_pi_history else 0.0,
     }
