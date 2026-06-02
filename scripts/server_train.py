@@ -30,6 +30,33 @@ def latest_epoch_in(checkpoint_dir):
     return latest_epoch
 
 
+def epoch_from_checkpoint_path(path):
+    match = re.search(r"epoch_(\d+)\.pth$", str(path))
+    return int(match.group(1)) if match else 0
+
+
+def resolve_resume_path(raw):
+    path = Path(raw).expanduser()
+    if path.exists():
+        return path.resolve()
+
+    normalized = Path(raw.replace("\\", "/")).expanduser()
+    if normalized.exists():
+        return normalized.resolve()
+
+    match = re.search(r"(epoch_\d+\.pth)$", raw)
+    if match:
+        candidate = Path(config.checkpoints) / match.group(1)
+        if candidate.exists():
+            return candidate.resolve()
+
+    raise FileNotFoundError(
+        "Resume checkpoint was not found: "
+        f"{raw!r}. On macOS/Linux use '/' as a path separator, for example "
+        "'--resume checkpoints_attention/epoch_272.pth'."
+    )
+
+
 def main():
     checkpoint_dir = Path(env("CHECKPOINTS", str, config.checkpoints)).expanduser().resolve()
     config.checkpoints = str(checkpoint_dir)
@@ -67,7 +94,7 @@ def main():
 
     resume = os.environ.get("RESUME", "").strip()
     if resume:
-        config.resume_checkpoint = str(Path(resume).expanduser().resolve())
+        config.resume_checkpoint = str(resolve_resume_path(resume))
         config.auto_resume = False
 
     final_epoch = os.environ.get("EPOCHS", "").strip()
@@ -75,7 +102,10 @@ def main():
     if final_epoch:
         config.num_epochs = int(final_epoch)
     if more_epochs:
-        config.num_epochs = latest_epoch_in(checkpoint_dir) + int(more_epochs)
+        base_epoch = epoch_from_checkpoint_path(config.resume_checkpoint) if resume else 0
+        if base_epoch == 0:
+            base_epoch = latest_epoch_in(checkpoint_dir)
+        config.num_epochs = base_epoch + int(more_epochs)
     config.more_epochs = None
 
     print("Training config:")
