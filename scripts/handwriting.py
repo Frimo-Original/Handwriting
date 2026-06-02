@@ -126,6 +126,8 @@ def cmd_train(args):
         "PROGRESS_MODE": args.progress_mode,
         "AUTO_RESUME": str(args.auto_resume).lower(),
         "RESUME": args.resume,
+        "TEACHER_FORCING_RATIO": args.teacher_forcing_ratio,
+        "SCHEDULED_SAMPLING_MODE": args.scheduled_sampling_mode,
     }
     if not args.rebuild_dataset:
         dataset_path = ROOT / "dataset" / "all_trajectories.npz"
@@ -144,6 +146,33 @@ def cmd_evaluate(args):
         command.extend(["--checkpoint", args.checkpoint])
     if args.output:
         command.extend(["--output", args.output])
+    run_python(command)
+
+
+def cmd_diagnose_checkpoint(args):
+    command = [
+        "src/diagnose_checkpoint.py",
+        "--checkpoints",
+        args.checkpoints,
+        "--sample-ids",
+        args.sample_ids,
+        "--texts",
+        args.texts,
+        "--output-dir",
+        args.output_dir,
+        "--sampling-mode",
+        args.sampling_mode,
+        "--stop-strategy",
+        args.stop_strategy,
+        "--min-len-per-char",
+        str(args.min_len_per_char),
+        "--max-len-per-char",
+        str(args.max_len_per_char),
+        "--bias",
+        str(args.bias),
+    ]
+    if args.checkpoint:
+        command.extend(["--checkpoint", args.checkpoint])
     run_python(command)
 
 
@@ -187,6 +216,7 @@ def cmd_generate(args):
         "MIN_GEN_LEN": args.min_len,
         "MAX_GEN_LEN": args.max_len,
         "STOP_STRATEGY": args.stop_strategy,
+        "SAMPLING_MODE": args.sampling_mode,
         "APPEND_EOS": str(args.append_eos).lower(),
         "OUTPUT_JSON": output_dir / f"{stem}.json",
         "OUTPUT_PNG": output_dir / f"{stem}.png",
@@ -214,6 +244,8 @@ def cmd_candidates(args):
         str(args.min_len_per_char),
         "--max-len-per-char",
         str(args.max_len_per_char),
+        "--sampling-mode",
+        args.sampling_mode,
         "--stop-strategy",
         args.stop_strategy,
     ]
@@ -293,6 +325,8 @@ def build_parser():
     train.add_argument("--progress-mode", default="live")
     train.add_argument("--resume", default="")
     train.add_argument("--auto-resume", action=argparse.BooleanOptionalAction, default=True)
+    train.add_argument("--teacher-forcing-ratio", default="")
+    train.add_argument("--scheduled-sampling-mode", choices=["argmax", "mean", "sample"], default="argmax")
     train.add_argument("--rebuild-dataset", action="store_true")
     train.set_defaults(func=cmd_train)
 
@@ -300,6 +334,22 @@ def build_parser():
     evaluate.add_argument("--checkpoint", default="")
     evaluate.add_argument("--output", default="")
     evaluate.set_defaults(func=cmd_evaluate)
+
+    diagnose = subparsers.add_parser(
+        "diagnose-checkpoint",
+        parents=[common],
+        help="Render teacher-forced reconstructions and deterministic generations.",
+    )
+    diagnose.add_argument("--checkpoint", default="")
+    diagnose.add_argument("--sample-ids", default="1,2,3")
+    diagnose.add_argument("--texts", default="dataset/target_texts.txt")
+    diagnose.add_argument("--output-dir", default="runs/diagnostics/latest")
+    diagnose.add_argument("--sampling-mode", choices=["sample", "argmax", "mean"], default="argmax")
+    diagnose.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="mean")
+    diagnose.add_argument("--min-len-per-char", type=int, default=45)
+    diagnose.add_argument("--max-len-per-char", type=int, default=350)
+    diagnose.add_argument("--bias", type=float, default=1.0)
+    diagnose.set_defaults(func=cmd_diagnose_checkpoint)
 
     profile = subparsers.add_parser("profile-train", parents=[common], help="Profile training bottlenecks on a few batches.")
     profile.add_argument("--checkpoint", default="")
@@ -321,6 +371,7 @@ def build_parser():
     generate.add_argument("--output-dir", default="runs/single")
     generate.add_argument("--name", default="")
     generate.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="mean")
+    generate.add_argument("--sampling-mode", choices=["sample", "argmax", "mean"], default="sample")
     generate.add_argument("--append-eos", action=argparse.BooleanOptionalAction, default=True)
     generate.set_defaults(func=cmd_generate)
 
@@ -333,6 +384,7 @@ def build_parser():
     candidates.add_argument("--base-seed", type=int, default=12345)
     candidates.add_argument("--min-len-per-char", type=int, default=45)
     candidates.add_argument("--max-len-per-char", type=int, default=350)
+    candidates.add_argument("--sampling-mode", choices=["sample", "argmax", "mean"], default="sample")
     candidates.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="mean")
     candidates.add_argument("--append-eos", action=argparse.BooleanOptionalAction, default=True)
     candidates.set_defaults(func=cmd_candidates)

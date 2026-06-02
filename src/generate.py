@@ -39,6 +39,7 @@ def generate(
         append_eos=None,
         eos_char=None,
         stop_strategy="max",
+        sampling_mode="sample",
         progress=True,
         return_diagnostics=False,
 ):
@@ -111,7 +112,14 @@ def generate(
             pi = F.softmax(torch.log(torch.clamp(pi, min=1e-8)) * (1.0 + bias), dim=-1)
             sigma = sigma * math.exp(-bias)
 
-        sample = sample_mdn(pi, mu, sigma, rho)
+        if sampling_mode == "argmax":
+            mixture_idx = pi.argmax(dim=1)
+            gather_idx = mixture_idx.view(-1, 1, 1).expand(-1, 1, 2)
+            sample = torch.gather(mu, 1, gather_idx).squeeze(1)
+        elif sampling_mode == "mean":
+            sample = (pi.unsqueeze(-1) * mu).sum(dim=1)
+        else:
+            sample = sample_mdn(pi, mu, sigma, rho)
         prev_x = sample
 
         sample_np = sample.squeeze(0).cpu().numpy()
@@ -165,6 +173,7 @@ def generate(
         "kappa_target": len(indices),
         "attention_stop_strategy": stop_strategy,
         "attention_progress": final_progress_value,
+        "sampling_mode": sampling_mode,
         "finished": bool(last_kappa and final_progress_value > len(indices) - 0.5),
         "mean_pen_up_probability": float(np.mean(e_prob_history)) if e_prob_history else 0.0,
         "mean_max_pi": float(np.mean(selected_pi_history)) if selected_pi_history else 0.0,

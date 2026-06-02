@@ -116,6 +116,7 @@ def main():
     parser.add_argument("--base-seed", type=int, default=config.candidate_base_seed)
     parser.add_argument("--min-len-per-char", type=int, default=config.candidate_min_len_per_char)
     parser.add_argument("--max-len-per-char", type=int, default=config.candidate_max_len_per_char)
+    parser.add_argument("--sampling-mode", choices=["sample", "argmax", "mean"], default="sample")
     parser.add_argument(
         "--append-eos",
         action=argparse.BooleanOptionalAction,
@@ -173,6 +174,7 @@ def main():
                     append_eos=args.append_eos,
                     eos_char=config.eos_char,
                     stop_strategy=args.stop_strategy,
+                    sampling_mode=args.sampling_mode,
                     progress=False,
                     return_diagnostics=True,
                 )
@@ -196,6 +198,7 @@ def main():
                     "pen_ups": diagnostics["pen_ups"],
                     "finished": diagnostics["finished"],
                     "attention_progress": diagnostics["attention_progress"],
+                    "sampling_mode": diagnostics["sampling_mode"],
                     "kappa_last_max": diagnostics["kappa_last_max"],
                     "kappa_last_mean": diagnostics["kappa_last_mean"],
                     "kappa_target": diagnostics["kappa_target"],

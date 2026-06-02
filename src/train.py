@@ -91,14 +91,21 @@ def kappa_progress_loss(kappa, lengths, text_lengths):
     return F.smooth_l1_loss(pred[mask], target[mask])
 
 
-def batch_losses(model, batch, device):
+def batch_losses(model, batch, device, teacher_forcing_ratio=1.0):
     dxy = batch["dxy"].to(device, non_blocking=config.pin_memory)
     e_target = batch["e"].to(device, non_blocking=config.pin_memory)
     text = batch["text"].to(device, non_blocking=config.pin_memory)
     text_lengths = batch["text_lengths"].to(device, non_blocking=config.pin_memory)
     lengths = batch["length"].to(device, non_blocking=config.pin_memory)
 
-    outputs = model(dxy, e_target, text, text_lengths, teacher_forcing_ratio=1.0)
+    outputs = model(
+        dxy,
+        e_target,
+        text,
+        text_lengths,
+        teacher_forcing_ratio=teacher_forcing_ratio,
+        scheduled_sampling_mode=getattr(config, "scheduled_sampling_mode", "argmax"),
+    )
 
     B, T = dxy.shape[:2]
     mask = torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)
@@ -155,6 +162,7 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
     total_loss = 0.0
     total_batches = 0
     grad_accum_steps = getattr(config, "grad_accum_steps", 1)
+    teacher_forcing_ratio = float(getattr(config, "teacher_forcing_ratio", 1.0))
     compiled_model = getattr(model, "_orig_mod", None) is not None
     compile_heartbeat_seconds = getattr(config, "compile_heartbeat_seconds", 15)
 
@@ -193,7 +201,12 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
             every_seconds=compile_heartbeat_seconds,
             enabled=first_compiled_batch,
         ):
-            losses = batch_losses(model, batch, device)
+            losses = batch_losses(
+                model,
+                batch,
+                device,
+                teacher_forcing_ratio=teacher_forcing_ratio,
+            )
         forward_seconds = time.perf_counter() - forward_started
         loss = losses["loss"]
         loss_mdn = losses["mdn"]
@@ -228,6 +241,7 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
             "mdn": f"{loss_mdn.item():.4f}",
             "pen": f"{loss_e.item():.4f}",
             "attn": f"{loss_attn.item():.4f}",
+            "tf": f"{teacher_forcing_ratio:.2f}",
         }
         if device.type == "cuda":
             postfix["gpu"] = f"{torch.cuda.memory_allocated(device) / 1024**3:.2f}GB"

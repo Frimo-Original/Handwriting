@@ -17,18 +17,19 @@ def find_checkpoint(checkpoint_dir, checkpoint):
     if checkpoint:
         return Path(checkpoint).expanduser().resolve()
 
-    best = Path(checkpoint_dir) / "best.pth"
-    if best.exists():
-        return best
-
     paths = []
     for path in Path(checkpoint_dir).glob("epoch_*.pth"):
         match = re.fullmatch(r"epoch_(\d+)\.pth", path.name)
         if match:
             paths.append((int(match.group(1)), path))
-    if not paths:
-        raise FileNotFoundError(f"No best.pth or epoch_*.pth found in {checkpoint_dir}")
-    return max(paths, key=lambda item: item[0])[1]
+    if paths:
+        return max(paths, key=lambda item: item[0])[1]
+
+    best = Path(checkpoint_dir) / "best.pth"
+    if best.exists():
+        return best
+
+    raise FileNotFoundError(f"No epoch_*.pth or best.pth found in {checkpoint_dir}")
 
 
 def make_model():

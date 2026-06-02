@@ -61,6 +61,7 @@ def main():
     min_len = int(os.environ.get("MIN_GEN_LEN", "200"))
     max_len = int(os.environ.get("MAX_GEN_LEN", "3000"))
     stop_strategy = os.environ.get("STOP_STRATEGY", "max")
+    sampling_mode = os.environ.get("SAMPLING_MODE", "sample")
     append_eos = env_bool("APPEND_EOS", getattr(config, "append_eos_to_generation", True))
     output_json = os.environ.get("OUTPUT_JSON", "generated_trajectory.json")
     output_png = os.environ.get("OUTPUT_PNG", "generated_trajectory.png")
@@ -98,6 +99,7 @@ def main():
         append_eos=append_eos,
         eos_char=config.eos_char,
         stop_strategy=stop_strategy,
+        sampling_mode=sampling_mode,
         return_diagnostics=True,
     )
 

@@ -53,6 +53,16 @@ def main():
     config.eval_every = env("EVAL_EVERY", int, config.eval_every)
     config.progress_mode = env("PROGRESS_MODE", str, config.progress_mode)
     config.auto_resume = env_bool("AUTO_RESUME", config.auto_resume)
+    config.teacher_forcing_ratio = env(
+        "TEACHER_FORCING_RATIO",
+        float,
+        getattr(config, "teacher_forcing_ratio", 1.0),
+    )
+    config.scheduled_sampling_mode = env(
+        "SCHEDULED_SAMPLING_MODE",
+        str,
+        getattr(config, "scheduled_sampling_mode", "argmax"),
+    )
     config.pin_memory = config.device.type == "cuda"
 
     resume = os.environ.get("RESUME", "").strip()
@@ -85,6 +95,8 @@ def main():
     print("  save_temporary_each_epoch:", config.save_temporary_each_epoch)
     print("  auto_resume:", config.auto_resume)
     print("  resume_checkpoint:", config.resume_checkpoint)
+    print("  teacher_forcing_ratio:", config.teacher_forcing_ratio)
+    print("  scheduled_sampling_mode:", config.scheduled_sampling_mode)
 
     runpy.run_path("src/run_training.py", run_name="__main__")
 

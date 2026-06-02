@@ -141,7 +141,46 @@ class HandwritingSynthesis(nn.Module):
             kappa_initial_bias=kappa_initial_bias,
         )
 
-    def forward(self, dxy, e_target, text_indices, text_lengths, teacher_forcing_ratio=1.0):
+    def _predicted_input(self, e_logit, pi, mu, sigma, rho, mode):
+        with torch.no_grad():
+            if mode == "mean":
+                pred_x = (pi.unsqueeze(-1) * mu).sum(dim=1)
+            elif mode == "sample":
+                idx = torch.multinomial(pi, 1)
+                idx_expanded = idx.unsqueeze(-1).expand(-1, 1, 2)
+                mean = torch.gather(mu, 1, idx_expanded).squeeze(1)
+                std = torch.gather(sigma, 1, idx_expanded).squeeze(1)
+                corr = torch.gather(rho, 1, idx).squeeze(1)
+                eps = torch.randn_like(mean)
+                pred_x = torch.stack(
+                    [
+                        mean[:, 0] + std[:, 0] * eps[:, 0],
+                        mean[:, 1]
+                        + std[:, 1]
+                        * (
+                            corr * eps[:, 0]
+                            + torch.sqrt(torch.clamp(1.0 - corr**2, min=1e-5)) * eps[:, 1]
+                        ),
+                    ],
+                    dim=1,
+                )
+            else:
+                mixture_idx = pi.argmax(dim=1)
+                gather_idx = mixture_idx.view(-1, 1, 1).expand(-1, 1, 2)
+                pred_x = torch.gather(mu, 1, gather_idx).squeeze(1)
+
+            pred_e = (torch.sigmoid(e_logit) > 0.5).to(e_logit.dtype)
+        return pred_x.detach(), pred_e.detach()
+
+    def forward(
+        self,
+        dxy,
+        e_target,
+        text_indices,
+        text_lengths,
+        teacher_forcing_ratio=1.0,
+        scheduled_sampling_mode="argmax",
+    ):
         batch_size, T = dxy.shape[:2]
         device = dxy.device
         char_emb = self.text_embed(text_indices)
@@ -201,8 +240,27 @@ class HandwritingSynthesis(nn.Module):
             all_rho.append(rho)
             all_kappa.append(kappa)
 
-            prev_x = dxy[:, t, :]
-            prev_e = e_target[:, t, :]
+            if self.training and teacher_forcing_ratio < 1.0:
+                pred_x, pred_e = self._predicted_input(
+                    e_logit,
+                    pi,
+                    mu,
+                    sigma,
+                    rho,
+                    scheduled_sampling_mode,
+                )
+                if teacher_forcing_ratio <= 0.0:
+                    prev_x = pred_x
+                    prev_e = pred_e
+                else:
+                    use_teacher = (
+                        torch.rand(batch_size, 1, device=device) < teacher_forcing_ratio
+                    )
+                    prev_x = torch.where(use_teacher, dxy[:, t, :], pred_x)
+                    prev_e = torch.where(use_teacher, e_target[:, t, :], pred_e)
+            else:
+                prev_x = dxy[:, t, :]
+                prev_e = e_target[:, t, :]
 
         return {
             "e_logit": torch.stack(all_e_logit, dim=1),
