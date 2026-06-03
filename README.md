@@ -30,8 +30,8 @@ dataset/jsons/           Исходные траектории: trajectory_<id>.
 dataset/texts/           Подписи к этим траекториям: trajectory_<id>.txt
 dataset/all_trajectories.npz
                          Собранный датасет для обучения
-checkpoints_attention_eos_quotes/
-                         Сохраненные веса модели с <EOS> и русскими кавычками
+checkpoints_attention/   Основные сохраненные веса модели
+checkpoints_overfit/     Отдельные веса для маленьких overfit-экспериментов
 runs/                    Результаты генерации, оценки и отбора кандидатов
 ```
 
@@ -143,7 +143,7 @@ dataset/all_trajectories.npz
 улучшается, сохраняется:
 
 ```text
-checkpoints_attention_eos_quotes/best.pth
+checkpoints_attention/best.pth
 ```
 
 Обычные постоянные чекпойнты сохраняются каждые `save_every` эпох. При этом
@@ -208,6 +208,41 @@ runs/single/
 Этот режим удобен для быстрой проверки, но не является основным способом
 добиваться надежности.
 
+## Overfit-тест целевых слов
+
+Если validation loss выглядит нормально, но свободная генерация всё равно не
+пишет слова, нужно проверить более простой вопрос: может ли эта же модель
+переобучиться на нескольких конкретных примерах и начать писать их без teacher
+forcing.
+
+```bash
+.venv/bin/python scripts/handwriting.py overfit-words
+```
+
+По умолчанию команда стартует от `checkpoints_attention/epoch_272.pth`,
+ищет точные совпадения слов из `dataset/target_texts.txt` в `dataset/texts/`,
+обучает их в отдельном режиме и сохраняет:
+
+```text
+runs/overfit_words/latest/       PNG, JSON и overfit_report.json
+checkpoints_overfit/             latest.pth и постоянные overfit-чекпойнты
+```
+
+Важно: слово должно реально существовать в датасете как отдельная подпись. Если
+в `target_texts.txt` есть `мама`, но в `dataset/texts/` нет файла, где текст
+ровно `мама`, команда покажет это в `missing_words` и не будет притворяться,
+что модель обучалась на этом слове.
+
+Пример запуска только для `слово`:
+
+```bash
+.venv/bin/python scripts/handwriting.py overfit-words --words слово
+```
+
+Если после overfit-теста free-run PNG всё равно не становятся похожими на
+слово, проблема, скорее всего, в режиме авторегрессивного обучения/генерации, а
+не просто в количестве эпох.
+
 ## Структура проекта
 
 ```text
@@ -253,6 +288,9 @@ book.pdf                 Основная статья, на которой ос
 
 # Сгенерировать больше кандидатов на каждый bias
 .venv/bin/python scripts/handwriting.py candidates --variants 16
+
+# Проверить, может ли модель переобучиться на целевых словах
+.venv/bin/python scripts/handwriting.py overfit-words
 
 # Удалить старые сгенерированные файлы вне датасета/чекпойнтов
 .venv/bin/python scripts/handwriting.py clean

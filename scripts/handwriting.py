@@ -176,6 +176,62 @@ def cmd_diagnose_checkpoint(args):
     run_python(command)
 
 
+def cmd_overfit_words(args):
+    command = [
+        "src/overfit_words.py",
+        "--checkpoints",
+        args.checkpoints,
+        "--checkpoint",
+        args.checkpoint,
+        "--dataset",
+        args.dataset,
+        "--json-dir",
+        args.json_dir,
+        "--text-dir",
+        args.text_dir,
+        "--words-file",
+        args.words_file,
+        "--sample-ids",
+        args.sample_ids,
+        "--match",
+        args.match,
+        "--epochs",
+        str(args.epochs),
+        "--batch-size",
+        str(args.batch_size),
+        "--lr",
+        str(args.lr),
+        "--teacher-forcing-ratio",
+        str(args.teacher_forcing_ratio),
+        "--scheduled-sampling-mode",
+        args.scheduled_sampling_mode,
+        "--eval-every",
+        str(args.eval_every),
+        "--save-every",
+        str(args.save_every),
+        "--output-dir",
+        args.output_dir,
+        "--checkpoint-output-dir",
+        args.checkpoint_output_dir,
+        "--biases",
+        args.biases,
+        "--sampling-modes",
+        args.sampling_modes,
+        "--min-len-per-char",
+        str(args.min_len_per_char),
+        "--max-len-per-char",
+        str(args.max_len_per_char),
+        "--stop-strategy",
+        args.stop_strategy,
+    ]
+    if args.words:
+        command.append("--words")
+        command.extend(args.words)
+    if args.require_all_words:
+        command.append("--require-all-words")
+    run_python(command)
+
+
 def cmd_profile_train(args):
     command = [
         "src/profile_training.py",
@@ -350,6 +406,36 @@ def build_parser():
     diagnose.add_argument("--max-len-per-char", type=int, default=350)
     diagnose.add_argument("--bias", type=float, default=1.0)
     diagnose.set_defaults(func=cmd_diagnose_checkpoint)
+
+    overfit = subparsers.add_parser(
+        "overfit-words",
+        parents=[common],
+        help="Overfit on a few existing word samples and render free-run generations.",
+    )
+    overfit.add_argument("--checkpoint", default="")
+    overfit.add_argument("--dataset", default="dataset/all_trajectories.npz")
+    overfit.add_argument("--json-dir", default="dataset/jsons")
+    overfit.add_argument("--text-dir", default="dataset/texts")
+    overfit.add_argument("--words", nargs="*", default=None)
+    overfit.add_argument("--words-file", default="dataset/target_texts.txt")
+    overfit.add_argument("--sample-ids", default="")
+    overfit.add_argument("--match", choices=["exact", "contains"], default="exact")
+    overfit.add_argument("--require-all-words", action="store_true")
+    overfit.add_argument("--epochs", type=int, default=200)
+    overfit.add_argument("--batch-size", type=int, default=4)
+    overfit.add_argument("--lr", type=float, default=0.00003)
+    overfit.add_argument("--teacher-forcing-ratio", type=float, default=0.98)
+    overfit.add_argument("--scheduled-sampling-mode", choices=["argmax", "mean", "sample"], default="mean")
+    overfit.add_argument("--eval-every", type=int, default=25)
+    overfit.add_argument("--save-every", type=int, default=50)
+    overfit.add_argument("--output-dir", default="runs/overfit_words/latest")
+    overfit.add_argument("--checkpoint-output-dir", default="checkpoints_overfit")
+    overfit.add_argument("--biases", default="1.0")
+    overfit.add_argument("--sampling-modes", default="argmax")
+    overfit.add_argument("--min-len-per-char", type=int, default=45)
+    overfit.add_argument("--max-len-per-char", type=int, default=350)
+    overfit.add_argument("--stop-strategy", choices=["max", "mean", "min"], default="mean")
+    overfit.set_defaults(func=cmd_overfit_words)
 
     profile = subparsers.add_parser("profile-train", parents=[common], help="Profile training bottlenecks on a few batches.")
     profile.add_argument("--checkpoint", default="")
